@@ -217,7 +217,7 @@ export default function DutyRosterPage() {
     }
   };
 
-  const handleCellClick = (e: React.MouseEvent, empId: string, day: number) => {
+  const handleCellClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Selection is already finalized by mousedown (plain click, drag, Shift, or
     // Ctrl) — this just positions and opens the dropdown for what's selected.
@@ -562,7 +562,7 @@ export default function DutyRosterPage() {
                           ${isSelected ? '!bg-sky-100/60 shadow-[inset_0_0_0_1.5px_#3b82f6]' : ''}`}
                         onMouseDown={e => handleCellMouseDown(e, emp.id, day)}
                         onMouseEnter={() => handleCellMouseEnter(emp.id, day)}
-                        onClick={e => handleCellClick(e, emp.id, day)}
+                        onClick={e => handleCellClick(e)}
                       >
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                           {duty && (
