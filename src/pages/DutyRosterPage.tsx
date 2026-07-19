@@ -15,6 +15,11 @@ function toISODate(y: number, m: number, d: number): string {
   return `${y}-${pad2(m + 1)}-${pad2(d)}`;
 }
 
+// Key used to identify a single (employee, day) cell inside the selectedCells Set
+function cellKey(empId: string, day: number): string {
+  return `${empId}|${day}`;
+}
+
 const DUTY_COLORS: Record<string, string> = {
   A: 'bg-sky-100/80 text-sky-800 border-sky-200/80',
   B: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
@@ -74,9 +79,13 @@ export default function DutyRosterPage() {
   const [hoverCol, setHoverCol] = useState<number | null>(null);
 
   // ── Multi-select ──
-  const [selection, setSelection] = useState<{ empId: string; days: number[] } | null>(null);
+  // Selection is a Set of "empId|day" keys, so cells across multiple employees
+  // and multiple days can all be selected together (not just one row at a time).
+  const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ empId: string; day: number } | null>(null);
+  // Anchor cell used as the "from" point for Shift+Click range selection
+  const anchorRef = useRef<{ empId: string; day: number } | null>(null);
 
   // ── Dropdown ──
   const [dropdown, setDropdown] = useState<{ x: number; y: number } | null>(null);
@@ -127,48 +136,92 @@ export default function DutyRosterPage() {
     return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
   }, [employees, filterTeam]);
 
+  // Row index of each employee within the currently filtered list, so a
+  // rectangular block of cells can be computed between any two employees.
+  const employeeRowIndex = useMemo(() => {
+    const map: Record<string, number> = {};
+    filteredEmployees.forEach((emp, i) => { map[emp.id] = i; });
+    return map;
+  }, [filteredEmployees]);
+
+  // Build the set of "empId|day" cell keys for the rectangular block spanning
+  // from cell A to cell B (inclusive), across employee rows and day columns.
+  const buildRectSelection = (aEmpId: string, aDay: number, bEmpId: string, bDay: number): Set<string> => {
+    const rowA = employeeRowIndex[aEmpId];
+    const rowB = employeeRowIndex[bEmpId];
+    if (rowA === undefined || rowB === undefined) return new Set([cellKey(bEmpId, bDay)]);
+
+    const rowLo = Math.min(rowA, rowB);
+    const rowHi = Math.max(rowA, rowB);
+    const dayLo = Math.min(aDay, bDay);
+    const dayHi = Math.max(aDay, bDay);
+
+    const next = new Set<string>();
+    for (let r = rowLo; r <= rowHi; r++) {
+      const emp = filteredEmployees[r];
+      if (!emp) continue;
+      for (let d = dayLo; d <= dayHi; d++) {
+        next.add(cellKey(emp.id, d));
+      }
+    }
+    return next;
+  };
+
   // ── Close dropdown ──
   const closeDropdown = useCallback(() => setDropdown(null), []);
 
   // ── Mouse handlers ──
   const handleCellMouseDown = (e: React.MouseEvent, empId: string, day: number) => {
     if (e.button !== 0) return;
-    if (selection?.empId === empId && selection.days.includes(day) && !e.shiftKey) return;
+
+    const isCtrl = e.ctrlKey || e.metaKey;
+    const isShift = e.shiftKey;
+
+    // Clicking a cell that's already part of the current selection (no modifier
+    // keys) shouldn't reset it — just let the click handler open the dropdown.
+    if (!isCtrl && !isShift && selectedCells.has(cellKey(empId, day))) return;
 
     closeDropdown();
 
-    // Shift-extend
-    if (e.shiftKey && selection?.empId === empId) {
-      const anchor = dragStartRef.current?.day ?? selection.days[0];
-      const lo = Math.min(anchor, day);
-      const hi = Math.max(anchor, day);
-      setSelection({ empId, days: Array.from({ length: hi - lo + 1 }, (_, i) => lo + i) });
+    // Shift+Click: select the rectangular range from the anchor to this cell
+    // (spans multiple employees and days if the anchor is on a different row).
+    if (isShift && anchorRef.current) {
+      setSelectedCells(buildRectSelection(anchorRef.current.empId, anchorRef.current.day, empId, day));
       return;
     }
 
-    // Start fresh drag
+    // Ctrl/Cmd+Click: toggle just this one cell in/out of the selection
+    if (isCtrl) {
+      setSelectedCells(prev => {
+        const next = new Set(prev);
+        const key = cellKey(empId, day);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+      });
+      anchorRef.current = { empId, day };
+      return;
+    }
+
+    // Plain click: start a fresh drag/range selection
     setIsDragging(true);
     dragStartRef.current = { empId, day };
-    setSelection({ empId, days: [day] });
+    anchorRef.current = { empId, day };
+    setSelectedCells(new Set([cellKey(empId, day)]));
   };
 
   const handleCellMouseEnter = (empId: string, day: number) => {
     setHoverRow(empId);
     setHoverCol(day);
-    if (isDragging && dragStartRef.current?.empId === empId) {
-      const anchor = dragStartRef.current.day;
-      const lo = Math.min(anchor, day);
-      const hi = Math.max(anchor, day);
-      setSelection({ empId, days: Array.from({ length: hi - lo + 1 }, (_, i) => lo + i) });
+    if (isDragging && dragStartRef.current) {
+      setSelectedCells(buildRectSelection(dragStartRef.current.empId, dragStartRef.current.day, empId, day));
     }
   };
 
   const handleCellClick = (e: React.MouseEvent, empId: string, day: number) => {
     e.stopPropagation();
-    if (!selection || selection.empId !== empId || !selection.days.includes(day)) {
-      setSelection({ empId, days: [day] });
-      dragStartRef.current = { empId, day };
-    }
+    // Selection is already finalized by mousedown (plain click, drag, Shift, or
+    // Ctrl) — this just positions and opens the dropdown for what's selected.
+    if (selectedCells.size === 0) { closeDropdown(); return; }
     const rect = e.currentTarget.getBoundingClientRect();
     setDropdown({ x: rect.left, y: rect.bottom });
   };
@@ -179,14 +232,15 @@ export default function DutyRosterPage() {
     const onMouseDown = (e: MouseEvent) => {
       if (dropdownRef.current?.contains(e.target as Node)) return;
       if (gridRef.current && !gridRef.current.contains(e.target as Node)) {
-        setSelection(null);
+        setSelectedCells(new Set());
+        anchorRef.current = null;
         closeDropdown();
       } else if (dropdown) {
         closeDropdown();
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setSelection(null); closeDropdown(); }
+      if (e.key === 'Escape') { setSelectedCells(new Set()); anchorRef.current = null; closeDropdown(); }
     };
     window.addEventListener('mouseup', onMouseUp);
     document.addEventListener('mousedown', onMouseDown);
@@ -200,10 +254,16 @@ export default function DutyRosterPage() {
 
   // ── Apply duty code ──
   const applyCode = (code: DutyCode) => {
-    if (!selection) return;
-    selection.days.forEach(d => updateRosterCell(selection.empId, d - 1, { duty: code }));
+    if (selectedCells.size === 0) return;
+    selectedCells.forEach(key => {
+      const sep = key.lastIndexOf('|');
+      const empId = key.slice(0, sep);
+      const day = Number(key.slice(sep + 1));
+      updateRosterCell(empId, day - 1, { duty: code });
+    });
     closeDropdown();
-    setSelection(null);
+    setSelectedCells(new Set());
+    anchorRef.current = null;
   };
 
   // ── Export ──
@@ -321,7 +381,7 @@ export default function DutyRosterPage() {
             {MONTHS[month]} {year} — Duty Schedule
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            {filteredEmployees.length} staff · {daysInMonth} days · Drag or Shift+Click to bulk-edit
+            {filteredEmployees.length} staff · {daysInMonth} days · Drag or Shift+Click for a range · Ctrl+Click to multi-select
           </p>
         </div>
 
@@ -478,7 +538,7 @@ export default function DutyRosterPage() {
                     const entry = empGrid[day - 1];
                     const duty = entry?.duty || '';
                     const isColHovered = hoverCol === day;
-                    const isSelected = selection?.empId === emp.id && selection.days.includes(day);
+                    const isSelected = selectedCells.has(cellKey(emp.id, day));
 
                     // Crosshair: row+col tint without covering shift badges
                     const crosshair = (isRowHovered && isColHovered && !isSelected)
@@ -534,7 +594,7 @@ export default function DutyRosterPage() {
           {/* Header */}
           <div className="px-3 py-2 bg-slate-800 text-white flex items-center justify-between rounded-t">
             <span className="text-[10px] font-bold uppercase tracking-widest">
-              {selection && selection.days.length > 1 ? `Set ${selection.days.length} cells` : 'Assign Code'}
+              {selectedCells.size > 1 ? `Set ${selectedCells.size} cells` : 'Assign Code'}
             </span>
             <button onClick={closeDropdown} className="p-0.5 hover:bg-slate-700 rounded">
               <X className="w-3 h-3" />
@@ -557,7 +617,7 @@ export default function DutyRosterPage() {
                 onClick={() => applyCode('' as DutyCode)}
                 className="w-full py-1.5 text-xs text-slate-500 hover:bg-slate-100 rounded transition-colors"
               >
-                Clear cell{selection && selection.days.length > 1 ? 's' : ''}
+                Clear cell{selectedCells.size > 1 ? 's' : ''}
               </button>
             </div>
           </div>

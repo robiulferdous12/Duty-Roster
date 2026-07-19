@@ -117,7 +117,8 @@ export default function OvertimePage() {
   const [editingEntry, setEditingEntry] = useState<OvertimeEntry | null>(null);
 
   // Form State
-  const [formEmpId, setFormEmpId] = useState('');
+  const [formEmpIds, setFormEmpIds] = useState<string[]>([]);
+  const [formEmpSearch, setFormEmpSearch] = useState('');
   const [formDate, setFormDate] = useState('');
   const [formFrom, setFormFrom] = useState('');
   const [formTo, setFormTo] = useState('');
@@ -221,7 +222,7 @@ export default function OvertimePage() {
       };
     }).filter(ot => {
       if (filterTeam !== 'All' && ot.employeeTeam !== filterTeam) return false;
-      
+
       if (filterCep !== 'All') {
         if (filterCep === 'None') {
           if (ot.cepId || ot.cepName || ot.cepNumber) return false;
@@ -229,7 +230,7 @@ export default function OvertimePage() {
           if (ot.cepId !== filterCep) return false;
         }
       }
-      
+
       // Date preset filtering
       if (filterDatePreset === 'today') {
         if (ot.date !== todayStr) return false;
@@ -241,7 +242,7 @@ export default function OvertimePage() {
         if (filterStartDate && ot.date < filterStartDate) return false;
         if (filterEndDate && ot.date > filterEndDate) return false;
       }
-      
+
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date));
   }, [overtime, employees, filterTeam, filterCep, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
@@ -310,10 +311,15 @@ export default function OvertimePage() {
     }
   };
 
+  // Find an existing overtime entry for a given employee on a given date (used by Grid cell clicks)
+  const findEntryForCell = (empId: string, dateStr: string) =>
+    overtime.find(ot => ot.employeeId === empId && ot.date === dateStr);
+
   // Open modal for Adding
   const openAddModal = (initialEmpId = '', initialDate = '') => {
     setEditingEntry(null);
-    setFormEmpId(initialEmpId || (employees[0]?.id || ''));
+    setFormEmpIds(initialEmpId ? [initialEmpId] : []);
+    setFormEmpSearch('');
     setFormDate(initialDate || new Date().toISOString().split('T')[0]);
     setFormFrom('18:00');
     setFormTo('22:00');
@@ -329,7 +335,8 @@ export default function OvertimePage() {
   // Open modal for Editing
   const openEditModal = (entry: OvertimeEntry) => {
     setEditingEntry(entry);
-    setFormEmpId(entry.employeeId);
+    setFormEmpIds([entry.employeeId]);
+    setFormEmpSearch('');
     setFormDate(entry.date);
     setFormFrom(entry.from);
     setFormTo(entry.to);
@@ -345,20 +352,18 @@ export default function OvertimePage() {
   // Save/Submit Form
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    const empId = formEmpId;
+    const empIds = formEmpIds;
     const date = formDate;
     const from = formFrom;
     const to = formTo;
     const hours = parseFloat(formHours);
 
-    if (!empId) { setFormError('Please select an employee.'); return; }
+    if (empIds.length === 0) { setFormError('Please select at least one employee.'); return; }
     if (!date) { setFormError('Please select a date.'); return; }
     if (!from || !to) { setFormError('Please fill in both From and To times.'); return; }
     if (isNaN(hours) || hours <= 0) { setFormError('Please enter a valid hours value.'); return; }
 
-    const newEntry: OvertimeEntry = {
-      id: editingEntry ? editingEntry.id : `ot_${Date.now()}`,
-      employeeId: empId,
+    const sharedFields = {
       date,
       from,
       to,
@@ -371,13 +376,74 @@ export default function OvertimePage() {
 
     let updated: OvertimeEntry[];
     if (editingEntry) {
+      // Editing always applies to the single original employee
+      const newEntry: OvertimeEntry = {
+        id: editingEntry.id,
+        employeeId: editingEntry.employeeId,
+        ...sharedFields,
+      };
       updated = overtime.map(ot => ot.id === editingEntry.id ? newEntry : ot);
     } else {
-      updated = [...overtime, newEntry];
+      // Adding: create one entry per selected employee, all sharing the same date/time/hours/CEP
+      const newEntries: OvertimeEntry[] = empIds.map((empId, i) => ({
+        id: `ot_${Date.now()}_${i}_${empId}`,
+        employeeId: empId,
+        ...sharedFields,
+      }));
+      updated = [...overtime, ...newEntries];
     }
 
     updateOvertime(updated);
     setShowAddModal(false);
+  };
+
+  // Delete the entry being edited (and close the modal), or — if there's no
+  // existing entry yet (Add mode) — just clear the editable fields instead.
+  const handleDeleteOrClear = () => {
+    if (editingEntry) {
+      if (confirm('Are you sure you want to delete this Overtime entry?')) {
+        updateOvertime(overtime.filter(ot => ot.id !== editingEntry.id));
+        setShowAddModal(false);
+      }
+      return;
+    }
+    setFormEmpIds([]);
+    setFormEmpSearch('');
+    setFormDate('');
+    setFormFrom('');
+    setFormTo('');
+    setFormHours('');
+    setFormCepId('');
+    setFormCepName('');
+    setFormCepNumber('');
+    setFormLunchBreak(false);
+    setFormError('');
+  };
+
+  // Toggle a single employee's checkbox in the multi-select picker
+  const toggleFormEmpId = (empId: string) => {
+    setFormEmpIds(prev => prev.includes(empId) ? prev.filter(id => id !== empId) : [...prev, empId]);
+  };
+
+  // Employees shown in the picker, filtered by the search box
+  const pickerEmployees = useMemo(() => {
+    const q = formEmpSearch.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter(emp =>
+      emp.name.toLowerCase().includes(q) ||
+      emp.id.toLowerCase().includes(q) ||
+      (emp.designation || '').toLowerCase().includes(q)
+    );
+  }, [employees, formEmpSearch]);
+
+  const allPickerSelected = pickerEmployees.length > 0 && pickerEmployees.every(emp => formEmpIds.includes(emp.id));
+
+  const toggleSelectAllPicker = () => {
+    if (allPickerSelected) {
+      setFormEmpIds(prev => prev.filter(id => !pickerEmployees.some(emp => emp.id === id)));
+    } else {
+      setFormEmpIds(prev => Array.from(new Set([...prev, ...pickerEmployees.map(emp => emp.id)])));
+    }
   };
 
   // Delete Overtime record
@@ -666,7 +732,14 @@ export default function OvertimePage() {
                           className={`relative w-9 min-w-[36px] max-w-[36px] h-6 p-0 text-center align-middle border-r border-b border-slate-200/60 cursor-pointer transition-colors
                             ${currentDayHighlight} ${holidayHighlight} ${fridayTint} ${crosshair}`}
                           onMouseEnter={() => { setHoverRow(emp.id); setHoverCol(day); }}
-                          onClick={() => openAddModal(emp.id, dateStr)}
+                          onClick={() => {
+                            const existing = findEntryForCell(emp.id, dateStr);
+                            if (existing) {
+                              openEditModal(existing);
+                            } else {
+                              openAddModal(emp.id, dateStr);
+                            }
+                          }}
                         >
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             {totalHrs > 0 && (
@@ -905,19 +978,62 @@ export default function OvertimePage() {
 
               {/* Employee Selection */}
               <div>
-                <label className="block text-[11px] font-semibold text-slate-500 mb-1">Employee *</label>
-                <select
-                  value={formEmpId}
-                  onChange={e => setFormEmpId(e.target.value)}
-                  disabled={!!editingEntry}
-                  className="w-full px-3 py-2 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400"
-                >
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.name} ({emp.id}) — {emp.designation}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-[11px] font-semibold text-slate-500">
+                    Employee(s) *{!editingEntry && formEmpIds.length > 0 && (
+                      <span className="ml-1 font-normal text-slate-400">({formEmpIds.length} selected)</span>
+                    )}
+                  </label>
+                  {!editingEntry && (
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllPicker}
+                      className="text-[10px] font-semibold text-slate-500 hover:text-slate-800 underline"
+                    >
+                      {allPickerSelected ? 'Clear All' : 'Select All'}
+                    </button>
+                  )}
+                </div>
+
+                {editingEntry ? (
+                  // Locked to the original employee while editing an existing entry
+                  <div className="w-full px-3 py-2 text-xs border border-slate-200 rounded bg-slate-50 text-slate-600">
+                    {(() => {
+                      const emp = employees.find(e => e.id === editingEntry.employeeId);
+                      return emp ? `${emp.name} (${emp.id}) — ${emp.designation}` : editingEntry.employeeId;
+                    })()}
+                  </div>
+                ) : (
+                  <>
+                    <input
+                      type="text"
+                      value={formEmpSearch}
+                      onChange={e => setFormEmpSearch(e.target.value)}
+                      placeholder="Search by name, ID or designation…"
+                      className="w-full px-3 py-1.5 text-xs border border-slate-200 rounded mb-1.5 focus:outline-none focus:border-slate-400"
+                    />
+                    <div className="border border-slate-200 rounded max-h-40 overflow-y-auto divide-y divide-slate-100">
+                      {pickerEmployees.map(emp => (
+                        <label
+                          key={emp.id}
+                          className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-50 cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formEmpIds.includes(emp.id)}
+                            onChange={() => toggleFormEmpId(emp.id)}
+                            className="rounded border-slate-300 text-slate-800 focus:ring-slate-500 h-3.5 w-3.5 cursor-pointer shrink-0"
+                          />
+                          <span className="flex-1 font-semibold text-slate-700 truncate">{emp.name} ({emp.id})</span>
+                          <span className="text-slate-400 shrink-0">{emp.designation}</span>
+                        </label>
+                      ))}
+                      {pickerEmployees.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-400 text-center">No employees match.</div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Date */}
@@ -1026,20 +1142,29 @@ export default function OvertimePage() {
                 )}
               </div>
 
-              <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
+              <div className="pt-3 flex items-center justify-between border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 rounded"
+                  onClick={handleDeleteOrClear}
+                  className="px-3 py-1.5 text-[11px] font-semibold text-rose-500 hover:bg-rose-50 rounded"
                 >
-                  Cancel
+                  {editingEntry ? 'Delete' : 'Clear'}
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded shadow-sm"
-                >
-                  Save Entry
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-3 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-100 rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded shadow-sm"
+                  >
+                    {!editingEntry && formEmpIds.length > 1 ? `Save ${formEmpIds.length} Entries` : 'Save Entry'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>

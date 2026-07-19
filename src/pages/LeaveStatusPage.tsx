@@ -8,11 +8,11 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 const LEAVE_COLORS: Record<string, string> = {
-  SL: 'bg-sky-100/80 text-sky-800 border-sky-200/80',
-  PL: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
-  LFA: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
-  ADJ: 'bg-amber-100/80 text-amber-800 border-amber-200/80',
-  A: 'bg-rose-100/80 text-rose-800 border-rose-200/80',
+  SL: 'bg-indigo-100/80 text-indigo-800 border-indigo-200/80',
+  PL: 'bg-lime-100/80 text-lime-800 border-lime-200/80',
+  LFA: 'bg-pink-100/80 text-pink-800 border-pink-200/80',
+  ADJ: 'bg-orange-100/80 text-orange-800 border-orange-200/80',
+  A: 'bg-red-500 text-white border-red-600',
 };
 
 const LEAVE_CODES: LeaveCode[] = ['SL', 'PL', 'LFA', 'ADJ', 'A'];

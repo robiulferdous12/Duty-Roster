@@ -1,4 +1,4 @@
-import type { Employee, MonthlyRoster } from '../types';
+import type { Employee, RosterStore } from '../types';
 
 // ── Employees ──
 const employees: Employee[] = [
@@ -38,9 +38,9 @@ const employees: Employee[] = [
   { id: 'C 21498', name: 'Abdul Bari', designation: 'Technician', team: 'Mechanical' },
 ];
 
-export const mockRoster: MonthlyRoster = {
+export const mockRosterStore: RosterStore = {
   year: 2026,
   month: 6, // July (0-indexed)
   employees,
-  grid: {},
+  monthlyGrids: {},
 };

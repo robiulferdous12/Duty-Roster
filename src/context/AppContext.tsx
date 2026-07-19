@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import type { MonthlyRoster, Employee, DutyCode, LeaveCode, PublicHoliday, CepEntry, OvertimeEntry } from '../types';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
+import type { MonthlyRoster, RosterStore, Employee, DutyCode, LeaveCode, PublicHoliday, CepEntry, OvertimeEntry, ShortLeaveEntry, DayEntry } from '../types';
 import { loadRoster, saveRoster } from '../utils/storage';
+import { monthKey } from '../utils/monthKey';
 
 interface AppContextValue {
   roster: MonthlyRoster;
@@ -11,19 +12,27 @@ interface AppContextValue {
   updatePublicHolidays: (holidays: PublicHoliday[]) => void;
   updateCepDirectory: (entries: CepEntry[]) => void;
   updateOvertime: (entries: OvertimeEntry[]) => void;
+  updateShortLeaveEntries: (entries: ShortLeaveEntry[]) => void;
+  /** Clears only the overtime entries that fall within the currently selected month. */
+  clearOvertimeForCurrentMonth: () => void;
+  /** Clears only the short leave entries that fall within the currently selected month. */
+  clearShortLeaveForCurrentMonth: () => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [roster, setRoster] = useState<MonthlyRoster | null>(null);
+  // `store` holds EVERY month's data at once (monthlyGrids is keyed by 'YYYY-MM').
+  // `roster`, derived below, exposes just the currently selected month's slice
+  // in the same shape pages already consume, so no page needed to change.
+  const [store, setStore] = useState<RosterStore | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // Fetch the roster from Supabase once on mount.
   useEffect(() => {
     let cancelled = false;
     loadRoster()
-      .then((r) => { if (!cancelled) setRoster(r); })
+      .then((s) => { if (!cancelled) setStore(s); })
       .catch((err) => {
         console.error('Failed to load roster:', err);
         if (!cancelled) setLoadError('Could not connect to the database. Check your Supabase configuration.');
@@ -31,14 +40,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Fire-and-forget background save; UI already updated optimistically via setRoster.
-  const persist = useCallback((updated: MonthlyRoster) => {
+  // Fire-and-forget background save; UI already updated optimistically via setStore.
+  const persist = useCallback((updated: RosterStore) => {
     saveRoster(updated).catch((err) => console.error('Failed to save roster:', err));
   }, []);
 
   const setRosterMonth = useCallback((year: number, month: number) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
+      // Only the "which month am I viewing" pointer changes here — each
+      // month's grid data lives under its own key and is left untouched.
       const updated = { ...prev, year, month };
       persist(updated);
       return updated;
@@ -50,22 +61,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dayIndex: number,
     updates: Partial<{ duty: DutyCode, leave: LeaveCode, shortLeave: number }>
   ) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
-      const empGrid = [...(prev.grid[employeeId] || [])];
+      const key = monthKey(prev.year, prev.month);
+      const monthGrid = prev.monthlyGrids[key] || {};
+      const empGrid = [...(monthGrid[employeeId] || [])];
       empGrid[dayIndex] = { ...empGrid[dayIndex], ...(updates as any) };
-      const updated = { ...prev, grid: { ...prev.grid, [employeeId]: empGrid } };
+      const updated = {
+        ...prev,
+        monthlyGrids: { ...prev.monthlyGrids, [key]: { ...monthGrid, [employeeId]: empGrid } },
+      };
       persist(updated);
       return updated;
     });
   }, [persist]);
 
+  // Clears the given field for the CURRENTLY SELECTED month's grid only —
+  // every other month's data is left completely untouched.
   const resetField = useCallback((field: 'duty' | 'leave' | 'shortLeave') => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
-      const newGrid: Record<string, any[]> = {};
-      Object.entries(prev.grid).forEach(([empId, days]) => {
-        newGrid[empId] = days.map(entry => {
+      const key = monthKey(prev.year, prev.month);
+      const monthGrid = prev.monthlyGrids[key];
+      if (!monthGrid) return prev; // nothing recorded for this month yet
+
+      const newMonthGrid: Record<string, DayEntry[]> = {};
+      Object.entries(monthGrid).forEach(([empId, days]) => {
+        newMonthGrid[empId] = days.map(entry => {
           const copy = { ...entry };
           if (field === 'duty') copy.duty = '';
           else if (field === 'leave') copy.leave = '';
@@ -73,37 +95,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return copy;
         });
       });
-      const updated = { ...prev, grid: newGrid };
+      const updated = { ...prev, monthlyGrids: { ...prev.monthlyGrids, [key]: newMonthGrid } };
       persist(updated);
       return updated;
     });
   }, [persist]);
 
   const updateEmployees = useCallback((employees: Employee[]) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
-      const newGrid = { ...prev.grid };
-      const daysInMonth = new Date(prev.year, prev.month + 1, 0).getDate();
-
-      employees.forEach((emp) => {
-        if (!newGrid[emp.id]) {
-          newGrid[emp.id] = Array.from({ length: daysInMonth }, () => ({ duty: '' as DutyCode, leave: '' as LeaveCode, shortLeave: undefined }));
-        }
-      });
-
+      // Employee roster is global, but if someone is removed we drop their
+      // grid rows across every month so no orphaned data lingers.
       const employeeIds = new Set(employees.map((e) => e.id));
-      Object.keys(newGrid).forEach((id) => {
-        if (!employeeIds.has(id)) delete newGrid[id];
+      const newMonthlyGrids: Record<string, Record<string, DayEntry[]>> = {};
+      Object.entries(prev.monthlyGrids).forEach(([mKey, monthGrid]) => {
+        const filtered: Record<string, DayEntry[]> = {};
+        Object.entries(monthGrid).forEach(([empId, days]) => {
+          if (employeeIds.has(empId)) filtered[empId] = days;
+        });
+        newMonthlyGrids[mKey] = filtered;
       });
 
-      const updated = { ...prev, employees, grid: newGrid };
+      const updated = { ...prev, employees, monthlyGrids: newMonthlyGrids };
       persist(updated);
       return updated;
     });
   }, [persist]);
 
   const updateCepDirectory = useCallback((entries: CepEntry[]) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, cepDirectory: entries };
       persist(updated);
@@ -112,7 +132,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const updatePublicHolidays = useCallback((holidays: PublicHoliday[]) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, publicHolidays: holidays };
       persist(updated);
@@ -121,13 +141,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [persist]);
 
   const updateOvertime = useCallback((entries: OvertimeEntry[]) => {
-    setRoster((prev) => {
+    setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, overtime: entries };
       persist(updated);
       return updated;
     });
   }, [persist]);
+
+  const updateShortLeaveEntries = useCallback((entries: ShortLeaveEntry[]) => {
+    setStore((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, shortLeaveEntries: entries };
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
+
+  const clearOvertimeForCurrentMonth = useCallback(() => {
+    setStore((prev) => {
+      if (!prev) return prev;
+      const remaining = (prev.overtime || []).filter((ot) => {
+        const d = new Date(ot.date + 'T00:00:00');
+        return !(d.getFullYear() === prev.year && d.getMonth() === prev.month);
+      });
+      const updated = { ...prev, overtime: remaining };
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
+
+  const clearShortLeaveForCurrentMonth = useCallback(() => {
+    setStore((prev) => {
+      if (!prev) return prev;
+      const remaining = (prev.shortLeaveEntries || []).filter((sl) => {
+        const d = new Date(sl.date + 'T00:00:00');
+        return !(d.getFullYear() === prev.year && d.getMonth() === prev.month);
+      });
+      const updated = { ...prev, shortLeaveEntries: remaining };
+      persist(updated);
+      return updated;
+    });
+  }, [persist]);
+
+  // Derive the page-facing roster: identical shape to before, with `grid`
+  // scoped to whichever month is currently selected.
+  const roster: MonthlyRoster | null = useMemo(() => {
+    if (!store) return null;
+    const key = monthKey(store.year, store.month);
+    return {
+      year: store.year,
+      month: store.month,
+      employees: store.employees,
+      grid: store.monthlyGrids[key] || {},
+      publicHolidays: store.publicHolidays,
+      cepDirectory: store.cepDirectory,
+      overtime: store.overtime,
+      shortLeaveEntries: store.shortLeaveEntries,
+    };
+  }, [store]);
 
   if (loadError) {
     return (
@@ -158,6 +230,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePublicHolidays,
       updateCepDirectory,
       updateOvertime,
+      updateShortLeaveEntries,
+      clearOvertimeForCurrentMonth,
+      clearShortLeaveForCurrentMonth,
     }}>
       {children}
     </AppContext.Provider>

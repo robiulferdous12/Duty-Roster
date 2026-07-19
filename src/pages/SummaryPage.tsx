@@ -16,11 +16,11 @@ const DUTY_COLORS: Record<string, string> = {
 };
 
 const LEAVE_COLORS: Record<string, string> = {
-  SL: 'bg-sky-100/80 text-sky-800 border-sky-200/80',
-  PL: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
-  LFA: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
-  ADJ: 'bg-amber-100/80 text-amber-800 border-amber-200/80',
-  A: 'bg-rose-100/80 text-rose-800 border-rose-200/80',
+  SL: 'bg-indigo-100/80 text-indigo-800 border-indigo-200/80',
+  PL: 'bg-lime-100/80 text-lime-800 border-lime-200/80',
+  LFA: 'bg-pink-100/80 text-pink-800 border-pink-200/80',
+  ADJ: 'bg-orange-100/80 text-orange-800 border-orange-200/80',
+  A: 'bg-red-500 text-white border-red-500',
 };
 
 // Overtime and Short Leave cells always use their own distinct, refined color — never the shift's pastel color
@@ -130,6 +130,21 @@ export default function SummaryPage() {
     return map;
   }, [roster.overtime, year, month]);
 
+  // ── Map short leave entries (from the Short Leave page) in this month to { empId: { day: totalHours } } ──
+  const activeShortLeave = useMemo(() => {
+    const map: Record<string, Record<number, number>> = {};
+    const entries = roster.shortLeaveEntries || [];
+    entries.forEach(sl => {
+      const d = new Date(sl.date + 'T00:00:00');
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        if (!map[sl.employeeId]) map[sl.employeeId] = {};
+        map[sl.employeeId][day] = (map[sl.employeeId][day] || 0) + (sl.totalHours || 0);
+      }
+    });
+    return map;
+  }, [roster.shortLeaveEntries, year, month]);
+
   const dayHeaders = useMemo(() =>
     Array.from({ length: daysInMonth }, (_, i) => {
       const d = new Date(year, month, i + 1);
@@ -141,13 +156,16 @@ export default function SummaryPage() {
     return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
   }, [employees, filterTeam]);
 
-  // ── Merge logic: leave > overtime > short leave > plain shift ──
+  // ── Merge logic: leave > overtime ± short leave > plain shift ──
   function getCellDisplay(empId: string, day: number, duty: DutyCode | '', leave: LeaveCode | '') {
     const otHrs = activeOvertime[empId]?.[day];
-    const shortLeaveHrs = grid[empId]?.[day - 1]?.shortLeave;
+    const shortLeaveHrs = activeShortLeave[empId]?.[day];
 
     if (leave) {
       return { text: leave, className: LEAVE_COLORS[leave] || '' };
+    }
+    if (otHrs !== undefined && shortLeaveHrs !== undefined) {
+      return { text: `${duty}+${fmtHrs(otHrs)}-${fmtHrs(shortLeaveHrs)}`, className: OT_COLOR };
     }
     if (otHrs !== undefined) {
       return { text: `${duty}+${fmtHrs(otHrs)}`, className: OT_COLOR };
