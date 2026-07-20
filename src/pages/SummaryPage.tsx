@@ -212,7 +212,7 @@ export default function SummaryPage() {
             {MONTHS[month]} {year} — Summary
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave · Leave code replaces shift · Friday/Holiday auto-fills H (except Substation) unless overtime is logged
+            {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave
           </p>
         </div>
 
