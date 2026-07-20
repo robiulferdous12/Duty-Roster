@@ -330,23 +330,38 @@ export default function DutyRosterPage() {
     const sheet = workbook.addWorksheet('Duty Roster');
 
     sheet.columns = [
-      { header: 'Employee ID', key: 'id', width: 14 },
-      { header: 'Name', key: 'name', width: 24 },
-      { header: 'Date From (yyyy-mm-dd)', key: 'from', width: 20, style: { numFmt: 'yyyy-mm-dd' } },
-      { header: 'Date To (yyyy-mm-dd)', key: 'to', width: 20, style: { numFmt: 'yyyy-mm-dd' } },
-      { header: 'Shift Name', key: 'shift', width: 12 },
-      { header: 'Unit', key: 'unit', width: 14 },
+      { header: 'Employee ID', key: 'id' },
+      { header: 'Name', key: 'name' },
+      { header: 'Date From (yyyy-mm-dd)', key: 'from', style: { numFmt: 'yyyy-mm-dd' } },
+      { header: 'Date To (yyyy-mm-dd)', key: 'to', style: { numFmt: 'yyyy-mm-dd' } },
+      { header: 'Shift Name', key: 'shift' },
+      { header: 'Unit', key: 'unit' },
     ];
 
     rows.forEach(r => sheet.addRow(r));
 
-    // Apply Cambria to every cell, bold on the header row
+    // Apply Cambria to every cell, bold + centered on the header row, centered everywhere else
     sheet.eachRow((row, rowNumber) => {
       row.eachCell({ includeEmpty: true }, cell => {
         cell.font = rowNumber === 1 ? { ...FONT, bold: true } : FONT;
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
     });
-    sheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Auto-fit each column's width to its widest header/content, so nothing is clipped or wraps
+    sheet.columns.forEach(column => {
+      let maxLength = column.header ? String(column.header).length : 10;
+      column.eachCell?.({ includeEmpty: true }, cell => {
+        const value = cell.value;
+        const display = value instanceof Date
+          ? (cell.numFmt?.length || 10) // dates render via numFmt (e.g. 'yyyy-mm-dd' = 10 chars)
+          : value != null
+            ? String(value).length
+            : 0;
+        if (display > maxLength) maxLength = display;
+      });
+      column.width = maxLength + 4; // padding so text isn't flush against the cell border
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
