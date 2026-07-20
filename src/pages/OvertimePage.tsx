@@ -892,7 +892,7 @@ export default function OvertimePage() {
           </table>
         ) : (
           /* ── MASTER LIST VIEW ── */
-          <div className="max-w-7xl mx-auto p-5">
+          <div className="max-w-[1600px] mx-auto p-5">
             <div className="bg-white border border-slate-200/60 rounded overflow-x-auto">
               <table ref={tableRef} className="min-w-full text-center border-collapse text-xs">
                 <thead>
@@ -906,7 +906,7 @@ export default function OvertimePage() {
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">From</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">To</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">Total Hours</th>
-                    <th className="px-4 py-1.5 text-center w-[220px]">CEP Name</th>
+                    <th className="px-4 py-1.5 text-center w-[340px]">CEP Name</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">CEP Number</th>
                     <th className="px-4 py-1.5 text-center w-24 whitespace-nowrap">Actions</th>
                   </tr>
@@ -923,7 +923,7 @@ export default function OvertimePage() {
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.from)}</td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.to)}</td>
                       <td className="px-4 py-1 text-slate-800 font-bold whitespace-nowrap">{ot.totalHours}h</td>
-                      <td className="px-4 py-1 text-slate-600 w-[220px]">
+                      <td className="px-4 py-1 text-slate-600 w-[340px]">
                         <span
                           className="block leading-snug"
                           style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}
