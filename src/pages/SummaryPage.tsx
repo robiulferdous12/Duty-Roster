@@ -157,19 +157,39 @@ export default function SummaryPage() {
   }, [employees, filterTeam]);
 
   // ── Merge logic: leave > overtime ± short leave > plain shift ──
-  function getCellDisplay(empId: string, day: number, duty: DutyCode | '', leave: LeaveCode | '') {
+  // Friday/Public Holiday override: for every team except Substation, the column
+  // is forced to 'H' regardless of the assigned shift — unless overtime was
+  // logged that day, in which case the normal Shift+Overtime formatting is kept.
+  function getCellDisplay(
+    empId: string,
+    day: number,
+    duty: DutyCode | '',
+    leave: LeaveCode | '',
+    team: string,
+    isHolidayOrFriday: boolean
+  ) {
     const otHrs = activeOvertime[empId]?.[day];
     const shortLeaveHrs = activeShortLeave[empId]?.[day];
 
     if (leave) {
       return { text: leave, className: LEAVE_COLORS[leave] || '' };
     }
+
+    const isSubstation = team === 'Substation';
+    const forceHoliday = isHolidayOrFriday && !isSubstation;
+
     if (otHrs !== undefined && shortLeaveHrs !== undefined) {
       return { text: `${duty}+${fmtHrs(otHrs)}-${fmtHrs(shortLeaveHrs)}`, className: OT_COLOR };
     }
     if (otHrs !== undefined) {
       return { text: `${duty}+${fmtHrs(otHrs)}`, className: OT_COLOR };
     }
+
+    // No overtime logged — Friday/Holiday override wins over shift/short-leave display.
+    if (forceHoliday) {
+      return { text: 'H', className: DUTY_COLORS.H };
+    }
+
     if (shortLeaveHrs !== undefined) {
       return { text: `${duty}-${fmtHrs(shortLeaveHrs)}`, className: SHORT_LEAVE_COLOR };
     }
@@ -192,7 +212,7 @@ export default function SummaryPage() {
             {MONTHS[month]} {year} — Summary
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave · Leave code replaces shift
+            {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave · Leave code replaces shift · Friday/Holiday auto-fills H (except Substation) unless overtime is logged
           </p>
         </div>
 
@@ -351,7 +371,15 @@ export default function SummaryPage() {
                     const entry = empGrid[day - 1];
                     const duty = entry?.duty || '';
                     const leave = entry?.leave || '';
-                    const cell = getCellDisplay(emp.id, day, duty, leave);
+                    const holidayTitle = activeHolidays[day];
+                    const cell = getCellDisplay(
+                      emp.id,
+                      day,
+                      duty,
+                      leave,
+                      emp.team || 'Electrical',
+                      Boolean(holidayTitle) || isFriday
+                    );
                     const isColHovered = hoverCol === day;
 
                     const crosshair = (isRowHovered && isColHovered)
@@ -361,7 +389,6 @@ export default function SummaryPage() {
                         : '';
 
                     const isCurrentDay = day === currentDay;
-                    const holidayTitle = activeHolidays[day];
                     const holidayHighlight = holidayTitle && !isCurrentDay && !cell ? 'bg-rose-50/30' : '';
                     const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
                     const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !cell ? 'bg-rose-50/30' : '';
