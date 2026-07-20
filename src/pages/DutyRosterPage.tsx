@@ -284,7 +284,7 @@ export default function DutyRosterPage() {
     let toDay = (td.getFullYear() === year && td.getMonth() === month) ? td.getDate() : daysInMonth;
     if (fromDay > toDay) [fromDay, toDay] = [toDay, fromDay];
 
-    type Row = { id: string; name: string; from: Date; to: Date; shift: string; unit: string };
+    type Row = { id: string; name: string; from: Date; to: Date; totalDays: number; shift: string; unit: string };
     const rows: Row[] = [];
 
     filteredEmployees.forEach(emp => {
@@ -299,6 +299,7 @@ export default function DutyRosterPage() {
             name: emp.name,
             from: new Date(Date.UTC(year, month, runStartDay)),
             to: new Date(Date.UTC(year, month, endDay)),
+            totalDays: endDay - runStartDay + 1,
             shift: runShift,
             unit: '',
           });
@@ -335,6 +336,7 @@ export default function DutyRosterPage() {
       { header: 'Name', key: 'name' },
       { header: 'Date From (yyyy-mm-dd)', key: 'from', style: { numFmt: 'yyyy-mm-dd' } },
       { header: 'Date To (yyyy-mm-dd)', key: 'to', style: { numFmt: 'yyyy-mm-dd' } },
+      { header: 'Total Days', key: 'totalDays' },
       { header: 'Shift Name', key: 'shift' },
       { header: 'Unit', key: 'unit' },
     ];
