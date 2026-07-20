@@ -906,7 +906,7 @@ export default function OvertimePage() {
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">From</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">To</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">Total Hours</th>
-                    <th className="px-4 py-1.5 text-center">CEP Name</th>
+                    <th className="px-4 py-1.5 text-center w-[220px]">CEP Name</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">CEP Number</th>
                     <th className="px-4 py-1.5 text-center w-24 whitespace-nowrap">Actions</th>
                   </tr>
@@ -923,10 +923,10 @@ export default function OvertimePage() {
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.from)}</td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.to)}</td>
                       <td className="px-4 py-1 text-slate-800 font-bold whitespace-nowrap">{ot.totalHours}h</td>
-                      <td className="px-4 py-1 text-slate-600 max-w-[260px]">
+                      <td className="px-4 py-1 text-slate-600 w-[220px]">
                         <span
                           className="block leading-snug"
-                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}
                           title={ot.cepName || undefined}
                         >
                           {ot.cepName || '-'}
