@@ -923,8 +923,14 @@ export default function OvertimePage() {
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.from)}</td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.to)}</td>
                       <td className="px-4 py-1 text-slate-800 font-bold whitespace-nowrap">{ot.totalHours}h</td>
-                      <td className="px-4 py-1 text-slate-600 max-w-[180px]">
-                        <span className="block line-clamp-2 leading-snug" title={ot.cepName || undefined}>{ot.cepName || '-'}</span>
+                      <td className="px-4 py-1 text-slate-600 max-w-[260px]">
+                        <span
+                          className="block leading-snug"
+                          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                          title={ot.cepName || undefined}
+                        >
+                          {ot.cepName || '-'}
+                        </span>
                       </td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{ot.cepNumber || '-'}</td>
                       <td className="px-4 py-1 text-center whitespace-nowrap">
