@@ -308,7 +308,8 @@ export default function DutyRosterPage() {
       };
 
       for (let day = fromDay; day <= toDay; day++) {
-        const duty = empGrid[day - 1]?.duty || '';
+        const rawDuty = empGrid[day - 1]?.duty || '';
+        const duty = rawDuty.includes('H') ? '' : rawDuty; // exclude shifts containing 'H' (Holiday) from export
         if (duty === runShift && runStartDay !== null) continue; // still in the same run
         closeRun(day - 1);
         if (duty) {
