@@ -893,39 +893,41 @@ export default function OvertimePage() {
         ) : (
           /* ── MASTER LIST VIEW ── */
           <div className="max-w-7xl mx-auto p-5">
-            <div className="bg-white border border-slate-200/60 rounded overflow-hidden">
-              <table ref={tableRef} className="w-full text-center border-collapse text-xs">
+            <div className="bg-white border border-slate-200/60 rounded overflow-x-auto">
+              <table ref={tableRef} className="min-w-full text-center border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100/60 border-b border-slate-200/60 text-slate-500 font-semibold">
-                    <th className="px-4 py-1.5 w-12 text-center">#</th>
-                    <th className="px-4 py-1.5 w-24 text-center">Staff ID</th>
-                    <th className="px-4 py-1.5 text-center">Name</th>
-                    <th className="px-4 py-1.5 text-center">Designation</th>
-                    <th className="px-4 py-1.5 text-center">Team</th>
+                    <th className="px-4 py-1.5 w-12 text-center whitespace-nowrap">#</th>
+                    <th className="px-4 py-1.5 w-24 text-center whitespace-nowrap">Staff ID</th>
+                    <th className="px-4 py-1.5 text-center whitespace-nowrap">Name</th>
+                    <th className="px-4 py-1.5 text-center whitespace-nowrap">Designation</th>
+                    <th className="px-4 py-1.5 text-center whitespace-nowrap">Team</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">Date</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">From</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">To</th>
                     <th className="px-4 py-1.5 text-center whitespace-nowrap">Total Hours</th>
                     <th className="px-4 py-1.5 text-center">CEP Name</th>
-                    <th className="px-4 py-1.5 text-center">CEP Number</th>
-                    <th className="px-4 py-1.5 text-center w-24">Actions</th>
+                    <th className="px-4 py-1.5 text-center whitespace-nowrap">CEP Number</th>
+                    <th className="px-4 py-1.5 text-center w-24 whitespace-nowrap">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredOvertimeList.map((ot, idx) => (
                     <tr key={ot.id} className="border-b border-slate-100/80 hover:bg-slate-50/60 transition-colors">
-                      <td className="px-4 py-1 text-slate-400">{idx + 1}</td>
-                      <td className="px-4 py-1 text-slate-700 font-semibold">{ot.employeeId}</td>
-                      <td className="px-4 py-1 font-bold text-slate-800">{ot.employeeName}</td>
-                      <td className="px-4 py-1 text-slate-600">{ot.employeeDesig}</td>
-                      <td className="px-4 py-1 text-slate-600">{ot.employeeTeam}</td>
+                      <td className="px-4 py-1 text-slate-400 whitespace-nowrap">{idx + 1}</td>
+                      <td className="px-4 py-1 text-slate-700 font-semibold whitespace-nowrap">{ot.employeeId}</td>
+                      <td className="px-4 py-1 font-bold text-slate-800 whitespace-nowrap">{ot.employeeName}</td>
+                      <td className="px-4 py-1 text-slate-600 whitespace-nowrap">{ot.employeeDesig}</td>
+                      <td className="px-4 py-1 text-slate-600 whitespace-nowrap">{ot.employeeTeam}</td>
                       <td className="px-4 py-1 text-slate-700 font-medium whitespace-nowrap">{formatDateToDMY(ot.date)}</td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.from)}</td>
                       <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{formatTimeTo12H(ot.to)}</td>
                       <td className="px-4 py-1 text-slate-800 font-bold whitespace-nowrap">{ot.totalHours}h</td>
-                      <td className="px-4 py-1 text-slate-600">{ot.cepName || '-'}</td>
-                      <td className="px-4 py-1 text-slate-600 font-mono">{ot.cepNumber || '-'}</td>
-                      <td className="px-4 py-1 text-center">
+                      <td className="px-4 py-1 text-slate-600 max-w-[180px]">
+                        <span className="block line-clamp-2 leading-snug" title={ot.cepName || undefined}>{ot.cepName || '-'}</span>
+                      </td>
+                      <td className="px-4 py-1 text-slate-600 font-mono whitespace-nowrap">{ot.cepNumber || '-'}</td>
+                      <td className="px-4 py-1 text-center whitespace-nowrap">
                         <div className="flex justify-center gap-1">
                           <button
                             onClick={() => openEditModal(ot)}
