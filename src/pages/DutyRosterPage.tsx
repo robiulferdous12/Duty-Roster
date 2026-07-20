@@ -284,9 +284,8 @@ export default function DutyRosterPage() {
     let toDay = (td.getFullYear() === year && td.getMonth() === month) ? td.getDate() : daysInMonth;
     if (fromDay > toDay) [fromDay, toDay] = [toDay, fromDay];
 
-    type Row = { sl: number; id: string; name: string; designation: string; from: Date; to: Date; shift: string; unit: string };
+    type Row = { id: string; name: string; from: Date; to: Date; shift: string; unit: string };
     const rows: Row[] = [];
-    let sl = 1;
 
     filteredEmployees.forEach(emp => {
       const empGrid = grid[emp.id] || [];
@@ -296,10 +295,8 @@ export default function DutyRosterPage() {
       const closeRun = (endDay: number) => {
         if (runStartDay !== null) {
           rows.push({
-            sl: sl++,
             id: emp.id,
             name: emp.name,
-            designation: emp.designation,
             from: new Date(Date.UTC(year, month, runStartDay)),
             to: new Date(Date.UTC(year, month, endDay)),
             shift: runShift,
@@ -333,13 +330,11 @@ export default function DutyRosterPage() {
     const sheet = workbook.addWorksheet('Duty Roster');
 
     sheet.columns = [
-      { header: 'SL', key: 'sl', width: 6 },
-      { header: 'ID', key: 'id', width: 12 },
+      { header: 'Employee ID', key: 'id', width: 14 },
       { header: 'Name', key: 'name', width: 24 },
-      { header: 'Designation', key: 'designation', width: 20 },
-      { header: 'From', key: 'from', width: 13, style: { numFmt: 'dd-mmm-yyyy' } },
-      { header: 'To', key: 'to', width: 13, style: { numFmt: 'dd-mmm-yyyy' } },
-      { header: 'Shift', key: 'shift', width: 8 },
+      { header: 'Date From (yyyy-mm-dd)', key: 'from', width: 20, style: { numFmt: 'yyyy-mm-dd' } },
+      { header: 'Date To (yyyy-mm-dd)', key: 'to', width: 20, style: { numFmt: 'yyyy-mm-dd' } },
+      { header: 'Shift Name', key: 'shift', width: 12 },
       { header: 'Unit', key: 'unit', width: 14 },
     ];
 
