@@ -301,7 +301,7 @@ export default function DutyRosterPage() {
             to: new Date(Date.UTC(year, month, endDay)),
             totalDays: endDay - runStartDay + 1,
             shift: runShift,
-            unit: '',
+            unit: 'Unit1',
           });
         }
         runStartDay = null;
