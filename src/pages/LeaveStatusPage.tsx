@@ -236,6 +236,30 @@ export default function LeaveStatusPage() {
     return entries;
   }, [employees, grid, daysInMonth, year, month]);
 
+  // ── Month-scoped record summary: total leave records & days, broken down by leave code ──
+  const monthLeaveSummary = useMemo(() => {
+    let totalRecords = 0;
+    let totalDays = 0;
+    const counts: Record<string, number> = {};
+    leaveEntries.forEach(en => {
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(en.employeeId)) return;
+      totalRecords++;
+      totalDays += en.totalDays;
+      counts[en.leaveType] = (counts[en.leaveType] || 0) + en.totalDays;
+    });
+    return { totalRecords, totalDays, counts };
+  }, [leaveEntries, selectedEmpIds]);
+
+  const monthLeaveSummaryText = useMemo(() => {
+    const breakdown = LEAVE_CODES
+      .filter(code => monthLeaveSummary.counts[code] > 0)
+      .map(code => `${code}=${String(monthLeaveSummary.counts[code]).padStart(2, '0')}`)
+      .join(', ');
+    return breakdown
+      ? `${monthLeaveSummary.totalRecords} total records · ${monthLeaveSummary.totalDays} days on leave (${breakdown})`
+      : `${monthLeaveSummary.totalRecords} total records · ${monthLeaveSummary.totalDays} days on leave`;
+  }, [monthLeaveSummary]);
+
   const filteredLeaveList = useMemo(() => {
     return leaveEntries.filter(en => {
       if (selectedEmpIds.size > 0 && !selectedEmpIds.has(en.employeeId)) return false;
@@ -422,6 +446,9 @@ export default function LeaveStatusPage() {
             {viewMode === 'grid'
               ? `${filteredEmployees.length} staff · ${daysInMonth} days · Drag or Shift+Click to bulk-edit`
               : `${filteredLeaveList.length} total records · ${totalVisibleDays} days on leave`}
+          </p>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            {monthLeaveSummaryText}
           </p>
         </div>
 
@@ -676,9 +703,9 @@ export default function LeaveStatusPage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay && !leave && !isSelected ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
                       const currentDayHighlight = isCurrentDay && !isSelected ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !leave && !isSelected ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
 
                       return (
                         <td

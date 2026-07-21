@@ -49,6 +49,13 @@ const COL = {
   team: { w: 'w-24 min-w-[96px]' },
 };
 
+const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'M', 'H'];
+const LEAVE_CODE_ORDER: LeaveCode[] = ['SL', 'PL', 'LFA', 'ADJ', 'A'];
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
 // ── Format hours without a trailing ".0" ──
 function fmtHrs(h: number): string {
   return Number.isInteger(h) ? String(h) : h.toFixed(1);
@@ -157,6 +164,42 @@ export default function SummaryPage() {
     return employees.filter(emp => selectedEmpIds.has(emp.id));
   }, [employees, selectedEmpIds]);
 
+  // ── Month-scoped record summary: shifts, leave days, OT hrs, Short Leave hrs ──
+  const monthSummary = useMemo(() => {
+    let shiftCount = 0;
+    let leaveTotal = 0;
+    const leaveCounts: Record<string, number> = {};
+    let otHours = 0;
+    let slHours = 0;
+
+    filteredEmployees.forEach(emp => {
+      const empGrid = grid[emp.id] || [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const entry = empGrid[d - 1];
+        if (entry?.duty) shiftCount++;
+        if (entry?.leave) {
+          leaveTotal++;
+          leaveCounts[entry.leave] = (leaveCounts[entry.leave] || 0) + 1;
+        }
+      }
+      Object.values(activeOvertime[emp.id] || {}).forEach(h => { otHours += h; });
+      Object.values(activeShortLeave[emp.id] || {}).forEach(h => { slHours += h; });
+    });
+
+    return { shiftCount, leaveTotal, leaveCounts, otHours, slHours };
+  }, [filteredEmployees, grid, activeOvertime, activeShortLeave, daysInMonth]);
+
+  const monthSummaryText = useMemo(() => {
+    const leaveBreakdown = LEAVE_CODE_ORDER
+      .filter(code => monthSummary.leaveCounts[code] > 0)
+      .map(code => `${code}=${pad2(monthSummary.leaveCounts[code])}`)
+      .join(', ');
+    const leavePart = leaveBreakdown
+      ? `${monthSummary.leaveTotal} leave days (${leaveBreakdown})`
+      : `${monthSummary.leaveTotal} leave days`;
+    return `${monthSummary.shiftCount} shifts · ${leavePart} · ${fmtHrs(monthSummary.otHours)} OT hrs · ${fmtHrs(monthSummary.slHours)} Short Leave hrs`;
+  }, [monthSummary]);
+
   // ── Merge logic: leave > overtime ± short leave > plain shift ──
   // Friday/Public Holiday override: for every team except Substation, the column
   // is forced to 'H' regardless of the assigned shift — unless overtime was
@@ -214,6 +257,9 @@ export default function SummaryPage() {
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave
+          </p>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            {monthSummaryText}
           </p>
         </div>
 
@@ -380,9 +426,9 @@ export default function SummaryPage() {
                         : '';
 
                     const isCurrentDay = day === currentDay;
-                    const holidayHighlight = holidayTitle && !isCurrentDay && !cell ? 'bg-rose-50/30' : '';
+                    const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
                     const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !cell ? 'bg-rose-50/30' : '';
+                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
 
                     return (
                       <td

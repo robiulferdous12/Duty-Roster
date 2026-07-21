@@ -177,6 +177,25 @@ export default function ShortLeavePage() {
     return employees.filter(emp => selectedEmpIds.has(emp.id));
   }, [employees, selectedEmpIds]);
 
+  // ── Month-scoped record summary: total Short Leave entries & hours this month ──
+  const monthShortLeaveSummary = useMemo(() => {
+    let count = 0;
+    let hours = 0;
+    shortLeaveEntries.forEach(sl => {
+      const d = new Date(sl.date + 'T00:00:00');
+      if (d.getFullYear() !== year || d.getMonth() !== month) return;
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(sl.employeeId)) return;
+      count++;
+      hours += sl.totalHours || 0;
+    });
+    return { count, hours };
+  }, [shortLeaveEntries, year, month, selectedEmpIds]);
+
+  const monthShortLeaveSummaryText = useMemo(() => {
+    const hrsDisplay = Number.isInteger(monthShortLeaveSummary.hours) ? monthShortLeaveSummary.hours : monthShortLeaveSummary.hours.toFixed(1);
+    return `${monthShortLeaveSummary.count} total entries recorded · ${hrsDisplay} hours Short Leave this month`;
+  }, [monthShortLeaveSummary]);
+
   // ── Date preset helpers (List view) ──
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -343,6 +362,9 @@ export default function ShortLeavePage() {
             {viewMode === 'grid'
               ? `${filteredEmployees.length} staff · ${daysInMonth} days · Click a day to log Short Leave`
               : `${filteredShortLeaveList.length} total entries recorded · ${totalVisibleHours} hours Short Leave`}
+          </p>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            {monthShortLeaveSummaryText}
           </p>
         </div>
 
@@ -577,9 +599,9 @@ export default function ShortLeavePage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay && shortLeave === undefined ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
                       const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && shortLeave === undefined ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
 
                       const dateStr = `${year}-${pad2(month + 1)}-${pad2(day)}`;
 

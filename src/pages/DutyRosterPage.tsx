@@ -137,6 +137,33 @@ export default function DutyRosterPage() {
     return employees.filter(emp => selectedEmpIds.has(emp.id));
   }, [employees, selectedEmpIds]);
 
+  // ── Month-scoped record summary: shifts assigned this month, broken down by duty code ──
+  const monthDutySummary = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let total = 0;
+    filteredEmployees.forEach(emp => {
+      const empGrid = grid[emp.id] || [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const duty = empGrid[d - 1]?.duty;
+        if (duty) {
+          total++;
+          counts[duty] = (counts[duty] || 0) + 1;
+        }
+      }
+    });
+    return { total, counts };
+  }, [filteredEmployees, grid, daysInMonth]);
+
+  const dutySummaryText = useMemo(() => {
+    const breakdown = DUTY_CODES
+      .filter(code => monthDutySummary.counts[code] > 0)
+      .map(code => `${code}=${pad2(monthDutySummary.counts[code])}`)
+      .join(', ');
+    return breakdown
+      ? `${monthDutySummary.total} shifts assigned this month (${breakdown})`
+      : `${monthDutySummary.total} shifts assigned this month`;
+  }, [monthDutySummary]);
+
   // Row index of each employee within the currently filtered list, so a
   // rectangular block of cells can be computed between any two employees.
   const employeeRowIndex = useMemo(() => {
@@ -397,6 +424,9 @@ export default function DutyRosterPage() {
           <p className="text-[11px] text-slate-400 mt-0.5">
             {filteredEmployees.length} staff · {daysInMonth} days · Drag or Shift+Click for a range · Ctrl+Click to multi-select
           </p>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            {dutySummaryText}
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -553,9 +583,9 @@ export default function DutyRosterPage() {
 
                     const isCurrentDay = day === currentDay;
                     const holidayTitle = activeHolidays[day];
-                    const holidayHighlight = holidayTitle && !isCurrentDay && !duty && !isSelected ? 'bg-rose-50/30' : '';
+                    const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
                     const currentDayHighlight = isCurrentDay && !isSelected ? 'bg-emerald-50' : '';
-                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !duty && !isSelected ? 'bg-rose-50/30' : '';
+                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
 
                     return (
                       <td

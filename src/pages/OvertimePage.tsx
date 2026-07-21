@@ -149,6 +149,25 @@ export default function OvertimePage() {
     return employees.filter(emp => selectedEmpIds.has(emp.id));
   }, [employees, selectedEmpIds]);
 
+  // Month-scoped record summary: total Overtime entries & hours this month
+  const monthOvertimeSummary = useMemo(() => {
+    let count = 0;
+    let hours = 0;
+    overtime.forEach(ot => {
+      const d = new Date(ot.date + 'T00:00:00');
+      if (d.getFullYear() !== year || d.getMonth() !== month) return;
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(ot.employeeId)) return;
+      count++;
+      hours += ot.totalHours || 0;
+    });
+    return { count, hours };
+  }, [overtime, year, month, selectedEmpIds]);
+
+  const monthOvertimeSummaryText = useMemo(() => {
+    const hrsDisplay = Number.isInteger(monthOvertimeSummary.hours) ? monthOvertimeSummary.hours : monthOvertimeSummary.hours.toFixed(1);
+    return `${monthOvertimeSummary.count} total entries recorded · ${hrsDisplay} hours Overtime this month`;
+  }, [monthOvertimeSummary]);
+
   // Map of active public holidays for column highlights
   const activeHolidays = useMemo(() => {
     const map: Record<number, string> = {};
@@ -472,6 +491,9 @@ export default function OvertimePage() {
                 ? `${filteredEmployees.length} staff · 5 CEP Columns`
                 : `${filteredOvertimeList.length} total entries recorded · ${totalVisibleHours} hours Overtime`}
           </p>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            {monthOvertimeSummaryText}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -710,9 +732,9 @@ export default function OvertimePage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay && totalHrs === 0 ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
                       const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && totalHrs === 0 ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
 
                       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
