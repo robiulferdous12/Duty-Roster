@@ -279,8 +279,21 @@ export default function OvertimePage() {
     return overtime
       .filter(ot => {
         if (ot.employeeId !== empId) return false;
-        const entryDate = new Date(ot.date + 'T00:00:00');
-        if (entryDate.getFullYear() !== year || entryDate.getMonth() !== month) return false;
+
+        // Same Date filter used by the Master List view, decoupled from whichever month is
+        // selected in Settings. 'all' turns this into a true cross-month master summary.
+        if (filterDatePreset === 'today') {
+          if (ot.date !== todayStr) return false;
+        } else if (filterDatePreset === 'thisMonth') {
+          if (ot.date < thisMonthRange.start || ot.date > thisMonthRange.end) return false;
+        } else if (filterDatePreset === 'lastMonth') {
+          if (ot.date < lastMonthRange.start || ot.date > lastMonthRange.end) return false;
+        } else if (filterDatePreset === 'custom') {
+          if (filterStartDate && ot.date < filterStartDate) return false;
+          if (filterEndDate && ot.date > filterEndDate) return false;
+        }
+        // filterDatePreset === 'all' → no date restriction at all
+
         const matchesId = ot.cepId === selectedCep.id;
         const matchesName = ot.cepName?.toLowerCase() === selectedCep.name.toLowerCase();
         const matchesNumber = ot.cepNumber === selectedCep.number;
@@ -288,6 +301,23 @@ export default function OvertimePage() {
       })
       .reduce((sum, ot) => sum + ot.totalHours, 0);
   };
+
+  // Human-readable label for whichever Date filter is active, used in the CEP Summary header
+  // so it's clear the grid no longer always reflects the Settings-selected month.
+  const dateFilterLabel = useMemo(() => {
+    switch (filterDatePreset) {
+      case 'today': return 'Today';
+      case 'thisMonth': return 'This Month';
+      case 'lastMonth': return 'Last Month';
+      case 'custom':
+        return filterStartDate && filterEndDate
+          ? `${formatDateToDMY(filterStartDate)} – ${formatDateToDMY(filterEndDate)}`
+          : 'Custom Range';
+      case 'all':
+      default:
+        return 'All Dates — Master Summary';
+    }
+  }, [filterDatePreset, filterStartDate, filterEndDate]);
 
   // Sticky columns configuration
   const desigLeft = BASE_LEFT;
@@ -482,13 +512,13 @@ export default function OvertimePage() {
       <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-white border-b border-slate-200/60">
         <div>
           <h1 className="text-lg font-bold text-slate-800 tracking-tight leading-tight">
-            {viewMode === 'grid' ? `${MONTHS[month]} ${year} — Overtime Grid` : viewMode === 'cep' ? `${MONTHS[month]} ${year} — Overtime CEP Summary` : 'Overtime Log — Master Directory'}
+            {viewMode === 'grid' ? `${MONTHS[month]} ${year} — Overtime Grid` : viewMode === 'cep' ? `${dateFilterLabel} — Overtime CEP Summary` : 'Overtime Log — Master Directory'}
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {viewMode === 'grid'
               ? `${filteredEmployees.length} staff · ${daysInMonth} days · Click a cell to log overtime`
               : viewMode === 'cep'
-                ? `${filteredEmployees.length} staff · 5 CEP Columns`
+                ? `${filteredEmployees.length} staff · 5 CEP Columns · ${dateFilterLabel}`
                 : `${filteredOvertimeList.length} total entries recorded · ${totalVisibleHours} hours Overtime`}
           </p>
           <p className="text-[11px] text-slate-500 font-medium mt-0.5">
@@ -565,8 +595,8 @@ export default function OvertimePage() {
             </div>
           )}
 
-          {/* Date Filter */}
-          {viewMode === 'list' && (
+          {/* Date Filter (List view's own filter, also drives the CEP Summary grid below) */}
+          {(viewMode === 'list' || viewMode === 'cep') && (
             <div className="flex items-center gap-1.5 animate-fadeIn">
               <span className="text-xs text-slate-500 font-medium">Date:</span>
               <select
