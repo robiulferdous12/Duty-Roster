@@ -49,7 +49,6 @@ const COL = {
   team: { w: 'w-24 min-w-[96px]' },
 };
 
-const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'M', 'H'];
 const LEAVE_CODE_ORDER: LeaveCode[] = ['SL', 'PL', 'LFA', 'ADJ', 'A'];
 
 function pad2(n: number): string {
