@@ -77,10 +77,13 @@ interface LeaveListEntry {
   leaveType: LeaveCode;
   fromIso: string;
   toIso: string;
+  /** Which month/year grid this entry's days live in — may differ from the Settings-selected month/year, since the List view is a cross-month master log. */
+  entryYear: number;
+  entryMonth: number;
 }
 
 export default function LeaveStatusPage() {
-  const { roster, updateRosterCell } = useApp();
+  const { roster, updateRosterCell, monthlyGrids } = useApp();
   const { year, month, employees, grid } = roster;
 
   // ── View mode: 'grid' (calendar) | 'list' (master log) ──
@@ -202,53 +205,68 @@ export default function LeaveStatusPage() {
     return { start: `${yyyy}-${mm}-01`, end: `${yyyy}-${mm}-${String(lastDay).padStart(2, '0')}` };
   }, []);
 
-  // ── Derive List-view rows: group each employee's consecutive same-code leave days into ranges ──
+  // ── Derive List-view rows: group each employee's consecutive same-code leave days into ranges,
+  //    across EVERY month's grid — this makes the List view a master log independent of the
+  //    month/year currently selected in Settings (Grid view below still uses that month's `grid`). ──
   const leaveEntries = useMemo((): LeaveListEntry[] => {
     const entries: LeaveListEntry[] = [];
-    employees.forEach(emp => {
-      const empGrid = grid[emp.id] || [];
-      let curCode: LeaveCode | '' = '';
-      let curStart = 0;
-      for (let d = 1; d <= daysInMonth + 1; d++) {
-        const code = d <= daysInMonth ? (empGrid[d - 1]?.leave || '') : '';
-        if (code !== curCode) {
-          if (curCode) {
-            const endDay = d - 1;
-            entries.push({
-              id: `${emp.id}_${curStart}`,
-              employeeId: emp.id,
-              employeeName: emp.name,
-              employeeDesig: emp.designation,
-              employeeTeam: emp.team || 'Electrical',
-              startDay: curStart,
-              endDay,
-              totalDays: endDay - curStart + 1,
-              leaveType: curCode as LeaveCode,
-              fromIso: isoDate(year, month, curStart),
-              toIso: isoDate(year, month, endDay),
-            });
+    Object.entries(monthlyGrids).forEach(([key, monthGrid]) => {
+      const [yStr, mStr] = key.split('-');
+      const gYear = parseInt(yStr, 10);
+      const gMonth = parseInt(mStr, 10) - 1; // 0-indexed
+      const gDaysInMonth = new Date(gYear, gMonth + 1, 0).getDate();
+
+      employees.forEach(emp => {
+        const empGrid = monthGrid[emp.id] || [];
+        let curCode: LeaveCode | '' = '';
+        let curStart = 0;
+        for (let d = 1; d <= gDaysInMonth + 1; d++) {
+          const code = d <= gDaysInMonth ? (empGrid[d - 1]?.leave || '') : '';
+          if (code !== curCode) {
+            if (curCode) {
+              const endDay = d - 1;
+              entries.push({
+                id: `${emp.id}_${key}_${curStart}`,
+                employeeId: emp.id,
+                employeeName: emp.name,
+                employeeDesig: emp.designation,
+                employeeTeam: emp.team || 'Electrical',
+                startDay: curStart,
+                endDay,
+                totalDays: endDay - curStart + 1,
+                leaveType: curCode as LeaveCode,
+                fromIso: isoDate(gYear, gMonth, curStart),
+                toIso: isoDate(gYear, gMonth, endDay),
+                entryYear: gYear,
+                entryMonth: gMonth,
+              });
+            }
+            curCode = code;
+            curStart = d;
           }
-          curCode = code;
-          curStart = d;
         }
-      }
+      });
     });
     return entries;
-  }, [employees, grid, daysInMonth, year, month]);
+  }, [employees, monthlyGrids]);
 
-  // ── Month-scoped record summary: total leave records & days, broken down by leave code ──
+  // ── Month-scoped record summary (always reflects the Settings-selected month, regardless of
+  //    what the List view's own Date filter is set to) — total leave records & days by leave code ──
   const monthLeaveSummary = useMemo(() => {
     let totalRecords = 0;
     let totalDays = 0;
     const counts: Record<string, number> = {};
+    const mStart = isoDate(year, month, 1);
+    const mEnd = isoDate(year, month, daysInMonth);
     leaveEntries.forEach(en => {
       if (selectedEmpIds.size > 0 && !selectedEmpIds.has(en.employeeId)) return;
+      if (en.fromIso < mStart || en.fromIso > mEnd) return;
       totalRecords++;
       totalDays += en.totalDays;
       counts[en.leaveType] = (counts[en.leaveType] || 0) + en.totalDays;
     });
     return { totalRecords, totalDays, counts };
-  }, [leaveEntries, selectedEmpIds]);
+  }, [leaveEntries, selectedEmpIds, year, month, daysInMonth]);
 
   const monthLeaveSummaryText = useMemo(() => {
     const breakdown = LEAVE_CODES
@@ -363,14 +381,16 @@ export default function LeaveStatusPage() {
     setSelection(null);
   };
 
-  // ── List view: open modal for adding a new leave range ──
+  // ── List view: open modal for adding a new leave range (defaults to today's real date,
+  //    since the master log isn't tied to whichever month is selected in Settings) ──
   const openAddModal = () => {
     setEditingEntry(null);
     setFormEmpId(employees[0]?.id || '');
     setFormLeaveType('SL');
-    const defaultDay = currentDay || 1;
-    setFormFrom(isoDate(year, month, defaultDay));
-    setFormTo(isoDate(year, month, defaultDay));
+    const now = new Date();
+    const todayIso = `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
+    setFormFrom(todayIso);
+    setFormTo(todayIso);
     setFormError('');
     setShowAddModal(true);
   };
@@ -395,38 +415,36 @@ export default function LeaveStatusPage() {
     if (!formFrom || !formTo) { setFormError('Please fill in both From and To dates.'); return; }
     if (formFrom > formTo) { setFormError('From date must be on or before To date.'); return; }
 
-    const parseDay = (iso: string): number | null => {
-      const [y, m, d] = iso.split('-').map(Number);
-      if (y !== year || (m - 1) !== month) return null;
-      return d;
-    };
-
-    const fromDay = parseDay(formFrom);
-    const toDay = parseDay(formTo);
-    if (fromDay === null || toDay === null) {
-      setFormError(`Dates must fall within ${MONTHS[month]} ${year}, the currently selected roster month.`);
+    const [fromY, fromM, fromD] = formFrom.split('-').map(Number);
+    const [toY, toM, toD] = formTo.split('-').map(Number);
+    if (fromY !== toY || fromM !== toM) {
+      setFormError('From and To dates must fall within the same month.');
       return;
     }
+    const targetYear = fromY;
+    const targetMonth = fromM - 1; // 0-indexed
 
-    // If editing, clear out the original range first (in case it shrank or moved)
+    // If editing, clear out the original range first (in its own original month —
+    // it may differ from the month the edited dates now fall into)
     if (editingEntry) {
       for (let d = editingEntry.startDay; d <= editingEntry.endDay; d++) {
-        updateRosterCell(editingEntry.employeeId, d - 1, { leave: '' as LeaveCode });
+        updateRosterCell(editingEntry.employeeId, d - 1, { leave: '' as LeaveCode }, editingEntry.entryYear, editingEntry.entryMonth);
       }
     }
 
-    for (let d = fromDay; d <= toDay; d++) {
-      updateRosterCell(formEmpId, d - 1, { leave: formLeaveType });
+    for (let d = fromD; d <= toD; d++) {
+      updateRosterCell(formEmpId, d - 1, { leave: formLeaveType }, targetYear, targetMonth);
     }
 
     setShowAddModal(false);
   };
 
-  // ── List view: delete a leave range ──
+  // ── List view: delete a leave range (writes back into the entry's own month, which may
+  //    differ from whatever month is currently selected in Settings) ──
   const handleDeleteLeave = (entry: LeaveListEntry) => {
     if (!confirm('Are you sure you want to delete this leave record?')) return;
     for (let d = entry.startDay; d <= entry.endDay; d++) {
-      updateRosterCell(entry.employeeId, d - 1, { leave: '' as LeaveCode });
+      updateRosterCell(entry.employeeId, d - 1, { leave: '' as LeaveCode }, entry.entryYear, entry.entryMonth);
     }
   };
 
@@ -917,7 +935,7 @@ export default function LeaveStatusPage() {
                 </div>
               </div>
               <p className="text-[10px] text-slate-400 -mt-1">
-                Dates must fall within {MONTHS[month]} {year}, the currently selected roster month.
+                From and To dates must fall within the same calendar month.
               </p>
 
               <div className="pt-3 flex justify-end gap-2 border-t border-slate-100">
