@@ -3,6 +3,7 @@ import { X, ChevronsLeft, ChevronsRight, Plus, Trash2, Edit2, LayoutGrid, List, 
 import { useApp } from '../context/AppContext';
 import type { OvertimeEntry } from '../types';
 import { exportElementAsImage } from '../utils/exportImage';
+import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -102,7 +103,7 @@ export default function OvertimePage() {
   // Column visibility & Team filter
   const [showDesig, setShowDesig] = useState<boolean>(true);
   const [showTeam, setShowTeam] = useState<boolean>(true);
-  const [filterTeam, setFilterTeam] = useState<string>('All');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [filterCep, setFilterCep] = useState<string>('All');
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('thisMonth');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
@@ -144,9 +145,9 @@ export default function OvertimePage() {
     }), [year, month, daysInMonth]);
 
   const filteredEmployees = useMemo(() => {
-    if (filterTeam === 'All') return employees;
-    return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
-  }, [employees, filterTeam]);
+    if (selectedEmpIds.size === 0) return employees;
+    return employees.filter(emp => selectedEmpIds.has(emp.id));
+  }, [employees, selectedEmpIds]);
 
   // Map of active public holidays for column highlights
   const activeHolidays = useMemo(() => {
@@ -221,7 +222,7 @@ export default function OvertimePage() {
         employeeTeam: emp ? (emp.team || 'Electrical') : '-',
       };
     }).filter(ot => {
-      if (filterTeam !== 'All' && ot.employeeTeam !== filterTeam) return false;
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(ot.employeeId)) return false;
 
       if (filterCep !== 'All') {
         if (filterCep === 'None') {
@@ -245,7 +246,7 @@ export default function OvertimePage() {
 
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [overtime, employees, filterTeam, filterCep, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
+  }, [overtime, employees, selectedEmpIds, filterCep, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
 
   const totalVisibleHours = useMemo(() => {
     return filteredOvertimeList.reduce((sum, ot) => sum + ot.totalHours, 0);
@@ -516,21 +517,11 @@ export default function OvertimePage() {
           </div>
 
           {/* Team Filter */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Team:</span>
-            <select
-              value={filterTeam}
-              onChange={e => setFilterTeam(e.target.value)}
-              className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400 font-semibold text-slate-700"
-            >
-              <option value="All">All Teams</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Store">Store</option>
-              <option value="Substation">Substation</option>
-              <option value="Paints">Paints</option>
-            </select>
-          </div>
+          <TeamFilterDropdown
+            employees={employees}
+            selected={selectedEmpIds}
+            onChange={setSelectedEmpIds}
+          />
 
           {/* CEP Filter */}
           {viewMode === 'list' && (

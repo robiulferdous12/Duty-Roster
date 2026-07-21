@@ -3,6 +3,7 @@ import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGr
 import { useApp } from '../context/AppContext';
 import type { LeaveCode } from '../types';
 import { exportElementAsImage } from '../utils/exportImage';
+import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -88,7 +89,7 @@ export default function LeaveStatusPage() {
   // ── Column visibility & Team filter ──
   const [showDesig, setShowDesig] = useState<boolean>(true);
   const [showTeam, setShowTeam] = useState<boolean>(true);
-  const [filterTeam, setFilterTeam] = useState<string>('All');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [filterLeaveType, setFilterLeaveType] = useState<string>('All');
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('all');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
@@ -174,9 +175,9 @@ export default function LeaveStatusPage() {
     }), [year, month, daysInMonth]);
 
   const filteredEmployees = useMemo(() => {
-    if (filterTeam === 'All') return employees;
-    return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
-  }, [employees, filterTeam]);
+    if (selectedEmpIds.size === 0) return employees;
+    return employees.filter(emp => selectedEmpIds.has(emp.id));
+  }, [employees, selectedEmpIds]);
 
   // ── Date preset helpers (List view) ──
   const todayStr = useMemo(() => {
@@ -237,7 +238,7 @@ export default function LeaveStatusPage() {
 
   const filteredLeaveList = useMemo(() => {
     return leaveEntries.filter(en => {
-      if (filterTeam !== 'All' && en.employeeTeam !== filterTeam) return false;
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(en.employeeId)) return false;
       if (filterLeaveType !== 'All' && en.leaveType !== filterLeaveType) return false;
 
       if (filterDatePreset === 'today') {
@@ -253,7 +254,7 @@ export default function LeaveStatusPage() {
 
       return true;
     }).sort((a, b) => b.fromIso.localeCompare(a.fromIso));
-  }, [leaveEntries, filterTeam, filterLeaveType, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
+  }, [leaveEntries, selectedEmpIds, filterLeaveType, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
 
   const totalVisibleDays = useMemo(() => {
     return filteredLeaveList.reduce((sum, en) => sum + en.totalDays, 0);
@@ -458,21 +459,11 @@ export default function LeaveStatusPage() {
           </div>
 
           {/* Team Filter */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Team:</span>
-            <select
-              value={filterTeam}
-              onChange={e => setFilterTeam(e.target.value)}
-              className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400 font-semibold text-slate-700"
-            >
-              <option value="All">All Teams</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Store">Store</option>
-              <option value="Substation">Substation</option>
-              <option value="Paints">Paints</option>
-            </select>
-          </div>
+          <TeamFilterDropdown
+            employees={employees}
+            selected={selectedEmpIds}
+            onChange={setSelectedEmpIds}
+          />
 
           {/* Leave Type Filter (replaces CEP filter from Overtime) */}
           {viewMode === 'list' && (

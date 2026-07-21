@@ -3,6 +3,7 @@ import { X, ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode } from '../types';
 import * as ExcelJS from 'exceljs';
+import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -65,7 +66,7 @@ export default function DutyRosterPage() {
   // ── Column visibility & Team filter ──
   const [showDesig, setShowDesig] = useState<boolean>(true);
   const [showTeam, setShowTeam] = useState<boolean>(true);
-  const [filterTeam, setFilterTeam] = useState<string>('All');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
   // ── Dynamic sticky offsets ──
   const desigLeft = BASE_LEFT; // always 304 (right after Name)
@@ -132,9 +133,9 @@ export default function DutyRosterPage() {
     }), [year, month, daysInMonth]);
 
   const filteredEmployees = useMemo(() => {
-    if (filterTeam === 'All') return employees;
-    return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
-  }, [employees, filterTeam]);
+    if (selectedEmpIds.size === 0) return employees;
+    return employees.filter(emp => selectedEmpIds.has(emp.id));
+  }, [employees, selectedEmpIds]);
 
   // Row index of each employee within the currently filtered list, so a
   // rectangular block of cells can be computed between any two employees.
@@ -400,21 +401,11 @@ export default function DutyRosterPage() {
 
         <div className="flex items-center gap-2">
           {/* Team Filter */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Team:</span>
-            <select
-              value={filterTeam}
-              onChange={e => setFilterTeam(e.target.value)}
-              className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400 font-semibold text-slate-700"
-            >
-              <option value="All">All Teams</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Store">Store</option>
-              <option value="Substation">Substation</option>
-              <option value="Paints">Paints</option>
-            </select>
-          </div>
+          <TeamFilterDropdown
+            employees={employees}
+            selected={selectedEmpIds}
+            onChange={setSelectedEmpIds}
+          />
 
           <button
             onClick={openExportModal}
@@ -651,7 +642,7 @@ export default function DutyRosterPage() {
             <div className="p-5 space-y-4">
               <p className="text-xs text-slate-500 leading-relaxed">
                 Select the date range to export. Consecutive days with the same shift are merged into a single row.
-                {filterTeam !== 'All' && <span className="block mt-1 font-semibold text-slate-600">Team filter active: {filterTeam}</span>}
+                {selectedEmpIds.size > 0 && <span className="block mt-1 font-semibold text-slate-600">Team filter active: {selectedEmpIds.size} staff selected</span>}
               </p>
               <div className="grid grid-cols-2 gap-3">
                 <div>

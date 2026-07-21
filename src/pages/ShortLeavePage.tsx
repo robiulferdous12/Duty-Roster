@@ -3,6 +3,7 @@ import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGr
 import { useApp } from '../context/AppContext';
 import type { ShortLeaveEntry } from '../types';
 import { exportElementAsImage } from '../utils/exportImage';
+import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -82,7 +83,7 @@ export default function ShortLeavePage() {
   // ── Column visibility & Team filter ──
   const [showDesig, setShowDesig] = useState<boolean>(true);
   const [showTeam, setShowTeam] = useState<boolean>(true);
-  const [filterTeam, setFilterTeam] = useState<string>('All');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('thisMonth');
   const [filterStartDate, setFilterStartDate] = useState<string>('');
   const [filterEndDate, setFilterEndDate] = useState<string>('');
@@ -172,9 +173,9 @@ export default function ShortLeavePage() {
   }, [shortLeaveEntries, year, month]);
 
   const filteredEmployees = useMemo(() => {
-    if (filterTeam === 'All') return employees;
-    return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
-  }, [employees, filterTeam]);
+    if (selectedEmpIds.size === 0) return employees;
+    return employees.filter(emp => selectedEmpIds.has(emp.id));
+  }, [employees, selectedEmpIds]);
 
   // ── Date preset helpers (List view) ──
   const todayStr = useMemo(() => {
@@ -209,7 +210,7 @@ export default function ShortLeavePage() {
         employeeTeam: emp ? (emp.team || 'Electrical') : '-',
       };
     }).filter(sl => {
-      if (filterTeam !== 'All' && sl.employeeTeam !== filterTeam) return false;
+      if (selectedEmpIds.size > 0 && !selectedEmpIds.has(sl.employeeId)) return false;
 
       if (filterDatePreset === 'today') {
         if (sl.date !== todayStr) return false;
@@ -224,7 +225,7 @@ export default function ShortLeavePage() {
 
       return true;
     }).sort((a, b) => b.date.localeCompare(a.date));
-  }, [shortLeaveEntries, employees, filterTeam, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
+  }, [shortLeaveEntries, employees, selectedEmpIds, filterDatePreset, filterStartDate, filterEndDate, todayStr, thisMonthRange, lastMonthRange]);
 
   const totalVisibleHours = useMemo(() => {
     return filteredShortLeaveList.reduce((sum, sl) => sum + sl.totalHours, 0);
@@ -379,21 +380,11 @@ export default function ShortLeavePage() {
           </div>
 
           {/* Team Filter */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Team:</span>
-            <select
-              value={filterTeam}
-              onChange={e => setFilterTeam(e.target.value)}
-              className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400 font-semibold text-slate-700"
-            >
-              <option value="All">All Teams</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Store">Store</option>
-              <option value="Substation">Substation</option>
-              <option value="Paints">Paints</option>
-            </select>
-          </div>
+          <TeamFilterDropdown
+            employees={employees}
+            selected={selectedEmpIds}
+            onChange={setSelectedEmpIds}
+          />
 
           {/* Date Filter (List view) */}
           {viewMode === 'list' && (

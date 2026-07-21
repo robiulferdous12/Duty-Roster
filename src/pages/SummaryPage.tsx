@@ -3,6 +3,7 @@ import { ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode, LeaveCode } from '../types';
 import { exportElementAsImage } from '../utils/exportImage';
+import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -60,7 +61,7 @@ export default function SummaryPage() {
   // ── Column visibility & Team filter ──
   const [showDesig, setShowDesig] = useState<boolean>(true);
   const [showTeam, setShowTeam] = useState<boolean>(true);
-  const [filterTeam, setFilterTeam] = useState<string>('All');
+  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
   // ── Export ──
   const tableRef = useRef<HTMLTableElement>(null);
@@ -152,9 +153,9 @@ export default function SummaryPage() {
     }), [year, month, daysInMonth]);
 
   const filteredEmployees = useMemo(() => {
-    if (filterTeam === 'All') return employees;
-    return employees.filter(emp => (emp.team || 'Electrical') === filterTeam);
-  }, [employees, filterTeam]);
+    if (selectedEmpIds.size === 0) return employees;
+    return employees.filter(emp => selectedEmpIds.has(emp.id));
+  }, [employees, selectedEmpIds]);
 
   // ── Merge logic: leave > overtime ± short leave > plain shift ──
   // Friday/Public Holiday override: for every team except Substation, the column
@@ -218,21 +219,11 @@ export default function SummaryPage() {
 
         <div className="flex items-center gap-3">
           {/* Team Filter */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-slate-500 font-medium">Team:</span>
-            <select
-              value={filterTeam}
-              onChange={e => setFilterTeam(e.target.value)}
-              className="px-2 py-1 text-xs border border-slate-200 rounded bg-white focus:outline-none focus:border-slate-400 font-semibold text-slate-700"
-            >
-              <option value="All">All Teams</option>
-              <option value="Electrical">Electrical</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Store">Store</option>
-              <option value="Substation">Substation</option>
-              <option value="Paints">Paints</option>
-            </select>
-          </div>
+          <TeamFilterDropdown
+            employees={employees}
+            selected={selectedEmpIds}
+            onChange={setSelectedEmpIds}
+          />
 
           <button
             onClick={handleExport}
