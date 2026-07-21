@@ -5,8 +5,16 @@ import { monthKey } from '../utils/monthKey';
 
 interface AppContextValue {
   roster: MonthlyRoster;
+  /** Every month's grid data at once, keyed by 'YYYY-MM' — lets pages build cross-month master lists (e.g. Leave List view) instead of being limited to the currently selected month's slice. */
+  monthlyGrids: Record<string, Record<string, DayEntry[]>>;
   setRosterMonth: (year: number, month: number) => void;
-  updateRosterCell: (employeeId: string, dayIndex: number, updates: Partial<{ duty: DutyCode, leave: LeaveCode, shortLeave: number }>) => void;
+  /**
+   * Updates a single day's cell. By default this writes into whichever month/year is
+   * currently selected in Settings (unchanged behavior for Grid views). Pass an explicit
+   * targetYear/targetMonth to write into a different month — needed when editing/deleting
+   * a Leave List entry that belongs to a month other than the one currently selected.
+   */
+  updateRosterCell: (employeeId: string, dayIndex: number, updates: Partial<{ duty: DutyCode, leave: LeaveCode, shortLeave: number }>, targetYear?: number, targetMonth?: number) => void;
   resetField: (field: 'duty' | 'leave' | 'shortLeave') => void;
   updateEmployees: (employees: Employee[]) => void;
   updatePublicHolidays: (holidays: PublicHoliday[]) => void;
@@ -59,11 +67,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const updateRosterCell = useCallback((
     employeeId: string,
     dayIndex: number,
-    updates: Partial<{ duty: DutyCode, leave: LeaveCode, shortLeave: number }>
+    updates: Partial<{ duty: DutyCode, leave: LeaveCode, shortLeave: number }>,
+    targetYear?: number,
+    targetMonth?: number,
   ) => {
     setStore((prev) => {
       if (!prev) return prev;
-      const key = monthKey(prev.year, prev.month);
+      const y = targetYear ?? prev.year;
+      const m = targetMonth ?? prev.month;
+      const key = monthKey(y, m);
       const monthGrid = prev.monthlyGrids[key] || {};
       const empGrid = [...(monthGrid[employeeId] || [])];
       empGrid[dayIndex] = { ...empGrid[dayIndex], ...(updates as any) };
@@ -223,6 +235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <AppContext.Provider value={{
       roster,
+      monthlyGrids: store?.monthlyGrids ?? {},
       setRosterMonth,
       updateRosterCell,
       resetField,
