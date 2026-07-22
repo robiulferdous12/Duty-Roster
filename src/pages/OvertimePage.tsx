@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { X, ChevronsLeft, ChevronsRight, Plus, Trash2, Edit2, LayoutGrid, List, Contact, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { OvertimeEntry } from '../types';
-import { exportElementAsImage } from '../utils/exportImage';
+import { exportToExcel, formatExcelCell, to12HourFormat, type ExcelColumnDef } from '../utils/excelExport';
 import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -78,10 +78,174 @@ export default function OvertimePage() {
   const tableRef = useRef<HTMLTableElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const handleExport = async () => {
-    if (!tableRef.current) return;
     setIsExporting(true);
     try {
-      await exportElementAsImage(tableRef.current, `Overtime_${viewMode}_${MONTHS[month]}${year}.png`);
+      if (viewMode === 'grid') {
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+        ];
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          columns.push({ header: String(d), key: `day_${d}`, align: 'center', width: 6 });
+        }
+
+        columns.push({ header: 'Total OT (hrs)', key: 'totalOt', align: 'center', width: 14 });
+
+        const rows = filteredEmployees.map((emp, idx) => {
+          const empOt = currentMonthOvertimeMap[emp.id] || {};
+          const rowData: Record<string, any> = {
+            sl: idx + 1,
+            id: emp.id,
+            name: emp.name,
+            desig: emp.designation || '',
+            team: emp.team || 'Electrical',
+          };
+
+          let sumOt = 0;
+          for (let d = 1; d <= daysInMonth; d++) {
+            const h = empOt[d] || 0;
+            if (h > 0) sumOt += h;
+            rowData[`day_${d}`] = h > 0 ? formatExcelCell(`${h}h`, 'ot') : formatExcelCell(null, 'ot');
+          }
+          rowData.totalOt = sumOt > 0 ? `${sumOt}h` : '0h';
+          return rowData;
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          totalOt: `${monthOvertimeSummary.hours}h`,
+        };
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          let dayOt = 0;
+          filteredEmployees.forEach(emp => {
+            const h = currentMonthOvertimeMap[emp.id]?.[d] || 0;
+            dayOt += h;
+          });
+          totalRow[`day_${d}`] = dayOt > 0 ? `${dayOt}h` : '-';
+        }
+
+        await exportToExcel({
+          filename: `Overtime_Grid_${MONTHS[month]}${year}.xlsx`,
+          sheetName: `${MONTHS[month]} ${year}`,
+          columns,
+          rows,
+          totalRow,
+        });
+      } else if (viewMode === 'cep') {
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+        ];
+
+        selectedCepIds.forEach((selectedId, colIdx) => {
+          const cep = cepDirectory.find(c => c.id === selectedId);
+          const headerLabel = cep ? `${cep.number} - ${cep.name}` : `CEP Column ${colIdx + 1}`;
+          columns.push({ header: headerLabel, key: `cep_${colIdx}`, align: 'center', width: 22 });
+        });
+
+        const rows = filteredEmployees.map((emp, idx) => {
+          const rowData: Record<string, any> = {
+            sl: idx + 1,
+            id: emp.id,
+            name: emp.name,
+            desig: emp.designation || '',
+            team: emp.team || 'Electrical',
+          };
+
+          selectedCepIds.forEach((_, colIdx) => {
+            const totalHrs = getEmployeeCepOvertime(emp.id, colIdx);
+            rowData[`cep_${colIdx}`] = totalHrs > 0 ? formatExcelCell(`${totalHrs}h`, 'ot') : formatExcelCell(null, 'ot');
+          });
+          return rowData;
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+        };
+
+        selectedCepIds.forEach((_, colIdx) => {
+          const sum = cepColumnTotals[colIdx] || 0;
+          totalRow[`cep_${colIdx}`] = sum > 0 ? `${sum}h` : '-';
+        });
+
+        await exportToExcel({
+          filename: `Overtime_CEP_${MONTHS[month]}${year}.xlsx`,
+          sheetName: 'CEP Overtime Summary',
+          columns,
+          rows,
+          totalRow,
+        });
+      } else {
+        // List mode
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+          { header: 'Date', key: 'date', align: 'center', width: 14, numFmt: 'yyyy-mm-dd' },
+          { header: 'From', key: 'from', align: 'center', width: 10 },
+          { header: 'To', key: 'to', align: 'center', width: 10 },
+          { header: 'Total Hours', key: 'hours', align: 'center', width: 12 },
+          { header: 'CEP Name', key: 'cepName', align: 'left', width: 24 },
+          { header: 'CEP Number', key: 'cepNumber', align: 'center', width: 16 },
+        ];
+
+        const rows = filteredOvertimeList.map((ot, idx) => {
+          const emp = employees.find(e => e.id === ot.employeeId);
+          return {
+            sl: idx + 1,
+            id: ot.employeeId,
+            name: emp?.name || ot.employeeId,
+            desig: emp?.designation || '',
+            team: emp?.team || 'Electrical',
+            date: ot.date,
+            from: to12HourFormat(ot.from),
+            to: to12HourFormat(ot.to),
+            hours: `${ot.totalHours}h`,
+            cepName: ot.cepName || '-',
+            cepNumber: ot.cepNumber || '-',
+          };
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          date: '',
+          from: '',
+          to: '',
+          hours: `${totalVisibleHours}h`,
+          cepName: '',
+          cepNumber: '',
+        };
+
+        await exportToExcel({
+          filename: `Overtime_MasterList_${MONTHS[month]}${year}.xlsx`,
+          sheetName: 'Overtime Directory',
+          columns,
+          rows,
+          totalRow,
+        });
+      }
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
@@ -162,11 +326,6 @@ export default function OvertimePage() {
     });
     return { count, hours };
   }, [overtime, year, month, selectedEmpIds]);
-
-  const monthOvertimeSummaryText = useMemo(() => {
-    const hrsDisplay = Number.isInteger(monthOvertimeSummary.hours) ? monthOvertimeSummary.hours : monthOvertimeSummary.hours.toFixed(1);
-    return `${monthOvertimeSummary.count} total entries recorded · ${hrsDisplay} hours Overtime this month`;
-  }, [monthOvertimeSummary]);
 
   // Map of active public holidays for column highlights
   const activeHolidays = useMemo(() => {
@@ -318,6 +477,14 @@ export default function OvertimePage() {
         return 'All Dates — Master Summary';
     }
   }, [filterDatePreset, filterStartDate, filterEndDate]);
+
+  const cepColumnTotals = useMemo(() => {
+    return Array.from({ length: 5 }).map((_, colIdx) => {
+      return filteredEmployees.reduce((sum, emp) => {
+        return sum + getEmployeeCepOvertime(emp.id, colIdx);
+      }, 0);
+    });
+  }, [filteredEmployees, overtime, selectedCepIds, cepDirectory, filterDatePreset, todayStr, thisMonthRange, lastMonthRange, filterStartDate, filterEndDate]);
 
   // Sticky columns configuration
   const desigLeft = BASE_LEFT;
@@ -520,9 +687,6 @@ export default function OvertimePage() {
               : viewMode === 'cep'
                 ? `${filteredEmployees.length} staff · 5 CEP Columns · ${dateFilterLabel}`
                 : `${filteredOvertimeList.length} total entries recorded · ${totalVisibleHours} hours Overtime`}
-          </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {monthOvertimeSummaryText}
           </p>
         </div>
 
@@ -762,9 +926,9 @@ export default function OvertimePage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
                       const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
 
                       const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
@@ -800,11 +964,10 @@ export default function OvertimePage() {
             </tbody>
           </table>
         ) : viewMode === 'cep' ? (
-          /* ── CEP SUMMARY GRID VIEW ── */
           <table
             ref={tableRef}
             className="border-separate border-spacing-0 text-[13px] select-none mx-auto"
-            style={{ width: `${frozenWidth + 144 * 5}px`, minWidth: `${frozenWidth + 144 * 5}px` }}
+            style={{ width: `${frozenWidth + 128 * 5}px`, minWidth: `${frozenWidth + 128 * 5}px` }}
           >
             <thead>
               <tr className="bg-slate-800 text-white">
@@ -850,7 +1013,7 @@ export default function OvertimePage() {
                   return (
                     <th
                       key={colIdx}
-                      className="w-36 min-w-[144px] max-w-[144px] h-12 text-center font-medium border-r border-slate-700 bg-slate-800 p-1"
+                      className="sticky top-0 z-30 w-32 min-w-[128px] max-w-[128px] h-12 text-center font-medium border-r border-slate-700 bg-slate-800 p-1"
                     >
                       <div className="flex flex-col gap-0.5 w-full">
                         <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">CEP Column {colIdx + 1}</span>
@@ -858,9 +1021,9 @@ export default function OvertimePage() {
                           <select
                             value={selectedCepIds[colIdx]}
                             onChange={e => {
-                              const next = [...selectedCepIds];
-                              next[colIdx] = e.target.value;
-                              setSelectedCepIds(next);
+                                const next = [...selectedCepIds];
+                                next[colIdx] = e.target.value;
+                                setSelectedCepIds(next);
                             }}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 text-slate-900 bg-white"
                           >
@@ -893,22 +1056,22 @@ export default function OvertimePage() {
                     className={`transition-colors ${idx % 2 === 1 ? 'bg-slate-50/40' : ''} ${isRowHovered ? '!bg-slate-100/70' : ''}`}
                     onMouseEnter={() => setHoverRow(emp.id)}
                   >
-                    <td className={`sticky ${COL.sl.left} z-20 ${COL.sl.w} h-8 text-center text-slate-400 border-r border-b border-slate-200/60 transition-colors ${bgBase}`}>{idx + 1}</td>
-                    <td className={`sticky ${COL.id.left} z-20 ${COL.id.w} h-8 px-2 text-slate-700 font-semibold border-r border-b border-slate-200/60 whitespace-nowrap transition-colors ${bgBase}`}>{emp.id}</td>
-                    <td className={`sticky ${COL.name.left} z-20 ${COL.name.w} h-8 px-2 text-[13.5px] font-bold text-slate-800 border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${bgBase}`}>{emp.name}</td>
+                    <td className={`sticky ${COL.sl.left} z-20 ${COL.sl.w} h-7 text-center text-slate-400 border-r border-b border-slate-200/60 transition-colors ${bgBase}`}>{idx + 1}</td>
+                    <td className={`sticky ${COL.id.left} z-20 ${COL.id.w} h-7 px-2 text-slate-700 font-semibold border-r border-b border-slate-200/60 whitespace-nowrap transition-colors ${bgBase}`}>{emp.id}</td>
+                    <td className={`sticky ${COL.name.left} z-20 ${COL.name.w} h-7 px-2 text-[13.5px] font-bold text-slate-800 border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${bgBase}`}>{emp.name}</td>
 
                     {showDesig ? (
-                      <td className={`sticky z-20 ${COL.desig.w} h-8 px-2 text-slate-500 text-xs border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${bgBase}`} style={{ left: desigLeft }}>{emp.designation}</td>
+                      <td className={`sticky z-20 ${COL.desig.w} h-7 px-2 text-slate-500 text-xs border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${bgBase}`} style={{ left: desigLeft }}>{emp.designation}</td>
                     ) : (
-                      <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-8 border-r border-b border-slate-200/60 transition-colors ${bgBase}`} style={{ left: desigLeft }} />
+                      <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-7 border-r border-b border-slate-200/60 transition-colors ${bgBase}`} style={{ left: desigLeft }} />
                     )}
 
                     {showTeam ? (
-                      <td className={`sticky z-20 ${COL.team.w} h-8 px-2 text-xs border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${shadowDividerBody} ${bgBase} ${TEAM_COLORS[emp.team || 'Electrical'] || 'text-slate-500'}`} style={{ left: teamLeft }}>
+                      <td className={`sticky z-20 ${COL.team.w} h-7 px-2 text-xs border-r border-b border-slate-200/60 whitespace-nowrap overflow-hidden text-ellipsis transition-colors ${shadowDividerBody} ${bgBase} ${TEAM_COLORS[emp.team || 'Electrical'] || 'text-slate-500'}`} style={{ left: teamLeft }}>
                         {emp.team || 'Electrical'}
                       </td>
                     ) : (
-                      <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-8 border-r border-b border-slate-200/60 transition-colors ${shadowDividerBody} ${bgBase}`} style={{ left: teamLeft }} />
+                      <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-7 border-r border-b border-slate-200/60 transition-colors ${shadowDividerBody} ${bgBase}`} style={{ left: teamLeft }} />
                     )}
 
                     {Array.from({ length: 5 }).map((_, colIdx) => {
@@ -916,10 +1079,10 @@ export default function OvertimePage() {
                       return (
                         <td
                           key={colIdx}
-                          className="w-36 min-w-[144px] max-w-[144px] h-8 p-0 text-center align-middle border-r border-b border-slate-200/60"
+                          className="w-32 min-w-[128px] max-w-[128px] h-7 p-0 text-center align-middle border-r border-b border-slate-200/60"
                         >
                           {totalHrs > 0 ? (
-                            <span className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded bg-violet-100/80 text-violet-800 border border-violet-200/80">
+                            <span className="text-[11.5px] font-bold text-violet-700">
                               {totalHrs}h
                             </span>
                           ) : (
@@ -931,6 +1094,37 @@ export default function OvertimePage() {
                   </tr>
                 );
               })}
+
+              {/* Total Row */}
+              <tr className="bg-slate-800 text-white font-bold border-t-2 border-slate-700">
+                <td className={`sticky ${COL.sl.left} z-20 ${COL.sl.w} h-7 text-center bg-slate-800 border-r border-slate-700`} />
+                <td className={`sticky ${COL.id.left} z-20 ${COL.id.w} h-7 px-2 text-center bg-slate-800 border-r border-slate-700`}>Total</td>
+                <td className={`sticky ${COL.name.left} z-20 ${COL.name.w} h-7 px-2 bg-slate-800 border-r border-slate-700`} />
+                {showDesig ? (
+                  <td className={`sticky z-20 ${COL.desig.w} h-7 bg-slate-800 border-r border-slate-700`} style={{ left: desigLeft }} />
+                ) : (
+                  <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-7 bg-slate-800 border-r border-slate-700`} style={{ left: desigLeft }} />
+                )}
+                {showTeam ? (
+                  <td className={`sticky z-20 ${COL.team.w} h-7 bg-slate-800 border-r border-slate-700 ${shadowDivider}`} style={{ left: teamLeft }} />
+                ) : (
+                  <td className={`sticky z-20 w-5 min-w-[20px] max-w-[20px] h-7 bg-slate-800 border-r border-slate-700 ${shadowDivider}`} style={{ left: teamLeft }} />
+                )}
+                {cepColumnTotals.map((total, colIdx) => (
+                  <td
+                    key={colIdx}
+                    className="w-32 min-w-[128px] max-w-[128px] h-7 text-center align-middle border-r border-slate-700 bg-slate-800"
+                  >
+                    {total > 0 ? (
+                      <span className="text-[11.5px] font-bold text-violet-300">
+                        {total}h
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">-</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
             </tbody>
           </table>
         ) : (
@@ -1008,6 +1202,18 @@ export default function OvertimePage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Table Footer Summary Byline ── */}
+      <div className="shrink-0 py-2.5 px-4 bg-slate-50 border-t border-slate-200/60 text-xs font-semibold text-slate-600 flex items-center justify-center flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+          <span>Records:</span>
+          <span>{monthOvertimeSummary.count}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-violet-100/80 text-violet-800 border-violet-200/80">
+          <span>Overtime:</span>
+          <span>{Number.isInteger(monthOvertimeSummary.hours) ? monthOvertimeSummary.hours : monthOvertimeSummary.hours.toFixed(1)}h</span>
+        </span>
       </div>
 
       {/* ── Log/Edit Overtime Modal ── */}

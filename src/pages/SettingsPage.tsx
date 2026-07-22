@@ -511,7 +511,7 @@ export default function SettingsPage() {
                           {row.title}
                         </td>
                       ) : null}
-                      <td className="px-4 py-2 text-slate-700 font-mono text-[11px]">{formatDateToDMY(row.date)}</td>
+                      <td className="px-4 py-2 text-slate-700 font-medium">{formatDateToDMY(row.date)}</td>
                       <td className="px-4 py-2 text-slate-600">{row.day}</td>
                       {row.isFirst ? (
                         <td className="px-4 py-2 text-right" rowSpan={row.span}>

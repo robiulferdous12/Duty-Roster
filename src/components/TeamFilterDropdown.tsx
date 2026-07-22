@@ -162,10 +162,10 @@ export default function TeamFilterDropdown({ employees, selected, onChange }: Te
                     onClick={() => toggleTeam(team)}
                     title={allSelected ? 'Deselect whole team' : 'Select whole team'}
                     className={`w-4 h-4 shrink-0 rounded-sm border flex items-center justify-center transition-colors ${allSelected
-                        ? 'bg-slate-800 border-slate-800'
-                        : someSelected
-                          ? 'bg-slate-300 border-slate-400'
-                          : 'bg-white border-slate-300'
+                      ? 'bg-slate-800 border-slate-800'
+                      : someSelected
+                        ? 'bg-slate-300 border-slate-400'
+                        : 'bg-white border-slate-300'
                       }`}
                   >
                     {allSelected && <Check className="w-3 h-3 text-white" />}

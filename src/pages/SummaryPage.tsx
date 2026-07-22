@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode, LeaveCode } from '../types';
-import { exportElementAsImage } from '../utils/exportImage';
+import { exportToExcel, formatExcelCell, type ExcelColumnDef } from '../utils/excelExport';
 import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -15,6 +15,8 @@ const DUTY_COLORS: Record<string, string> = {
   M: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
   H: 'bg-rose-50 text-rose-700 border-rose-200/80',
 };
+
+const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'M', 'H'];
 
 const LEAVE_COLORS: Record<string, string> = {
   SL: 'bg-indigo-100/80 text-indigo-800 border-indigo-200/80',
@@ -73,10 +75,90 @@ export default function SummaryPage() {
   const tableRef = useRef<HTMLTableElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const handleExport = async () => {
-    if (!tableRef.current) return;
     setIsExporting(true);
     try {
-      await exportElementAsImage(tableRef.current, `Summary_${MONTHS[month]}${year}.png`);
+      const columns: ExcelColumnDef[] = [
+        { header: '#', key: 'seq', align: 'center', width: 6 },
+        { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+        { header: 'Name', key: 'name', align: 'left', width: 22 },
+        { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+        { header: 'Team', key: 'team', align: 'left', width: 14 },
+      ];
+
+      for (let d = 1; d <= daysInMonth; d++) {
+        columns.push({ header: String(d), key: `day_${d}`, align: 'center', width: 7 });
+      }
+
+      columns.push(
+        { header: 'Shifts', key: 'shifts', align: 'center', width: 10 },
+        { header: 'Leaves (d)', key: 'leaves', align: 'center', width: 12 },
+        { header: 'OT (hrs)', key: 'ot', align: 'center', width: 12 },
+        { header: 'Short Leave (hrs)', key: 'shortLeave', align: 'center', width: 16 }
+      );
+
+      const rows = filteredEmployees.map((emp, idx) => {
+        const empGrid = grid[emp.id] || [];
+        const empOt = activeOvertime[emp.id] || {};
+        const empSl = activeShortLeave[emp.id] || {};
+
+        const rowData: Record<string, any> = {
+          seq: idx + 1,
+          id: emp.id,
+          name: emp.name,
+          desig: emp.designation || '',
+          team: emp.team || 'Electrical',
+        };
+
+        let shiftCount = 0;
+        let leaveCount = 0;
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const entry = empGrid[d - 1];
+          const duty = entry?.duty || '';
+          const leave = entry?.leave || '';
+          const isFri = dayHeaders[d - 1]?.isFriday || false;
+          const isHol = Boolean(activeHolidays[d]);
+          const isHolidayOrFriday = isFri || isHol;
+
+          const disp = getCellDisplay(emp.id, d, duty, leave, emp.team || 'Electrical', isHolidayOrFriday);
+          rowData[`day_${d}`] = formatExcelCell(disp?.text || null, 'duty');
+
+          if (duty) shiftCount++;
+          if (leave) leaveCount++;
+        }
+
+        let otSum = 0;
+        Object.values(empOt).forEach(h => { otSum += h; });
+        let slSum = 0;
+        Object.values(empSl).forEach(h => { slSum += h; });
+
+        rowData.shifts = shiftCount;
+        rowData.leaves = leaveCount;
+        rowData.ot = otSum > 0 ? `${fmtHrs(otSum)}h` : '-';
+        rowData.shortLeave = slSum > 0 ? `${fmtHrs(slSum)}h` : '-';
+
+        return rowData;
+      });
+
+      const totalRow: Record<string, any> = {
+        seq: '',
+        id: 'Total',
+        name: '',
+        desig: '',
+        team: '',
+        shifts: monthSummary.shiftCount,
+        leaves: monthSummary.leaveTotal,
+        ot: monthSummary.otHours > 0 ? `${fmtHrs(monthSummary.otHours)}h` : '-',
+        shortLeave: monthSummary.slHours > 0 ? `${fmtHrs(monthSummary.slHours)}h` : '-',
+      };
+
+      await exportToExcel({
+        filename: `Summary_${MONTHS[month]}${year}.xlsx`,
+        sheetName: `${MONTHS[month]} ${year}`,
+        columns,
+        rows,
+        totalRow,
+      });
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
@@ -166,6 +248,7 @@ export default function SummaryPage() {
   // ── Month-scoped record summary: shifts, leave days, OT hrs, Short Leave hrs ──
   const monthSummary = useMemo(() => {
     let shiftCount = 0;
+    const shiftCounts: Record<string, number> = {};
     let leaveTotal = 0;
     const leaveCounts: Record<string, number> = {};
     let otHours = 0;
@@ -175,7 +258,10 @@ export default function SummaryPage() {
       const empGrid = grid[emp.id] || [];
       for (let d = 1; d <= daysInMonth; d++) {
         const entry = empGrid[d - 1];
-        if (entry?.duty) shiftCount++;
+        if (entry?.duty) {
+          shiftCount++;
+          shiftCounts[entry.duty] = (shiftCounts[entry.duty] || 0) + 1;
+        }
         if (entry?.leave) {
           leaveTotal++;
           leaveCounts[entry.leave] = (leaveCounts[entry.leave] || 0) + 1;
@@ -185,19 +271,8 @@ export default function SummaryPage() {
       Object.values(activeShortLeave[emp.id] || {}).forEach(h => { slHours += h; });
     });
 
-    return { shiftCount, leaveTotal, leaveCounts, otHours, slHours };
+    return { shiftCount, shiftCounts, leaveTotal, leaveCounts, otHours, slHours };
   }, [filteredEmployees, grid, activeOvertime, activeShortLeave, daysInMonth]);
-
-  const monthSummaryText = useMemo(() => {
-    const leaveBreakdown = LEAVE_CODE_ORDER
-      .filter(code => monthSummary.leaveCounts[code] > 0)
-      .map(code => `${code}=${pad2(monthSummary.leaveCounts[code])}`)
-      .join(', ');
-    const leavePart = leaveBreakdown
-      ? `${monthSummary.leaveTotal} leave days (${leaveBreakdown})`
-      : `${monthSummary.leaveTotal} leave days`;
-    return `${monthSummary.shiftCount} shifts · ${leavePart} · ${fmtHrs(monthSummary.otHours)} OT hrs · ${fmtHrs(monthSummary.slHours)} Short Leave hrs`;
-  }, [monthSummary]);
 
   // ── Merge logic: leave > overtime ± short leave > plain shift ──
   // Friday/Public Holiday override: for every team except Substation, the column
@@ -256,9 +331,6 @@ export default function SummaryPage() {
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {filteredEmployees.length} staff · {daysInMonth} days · Shift ± Hrs = Overtime / Short Leave
-          </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {monthSummaryText}
           </p>
         </div>
 
@@ -425,9 +497,9 @@ export default function SummaryPage() {
                         : '';
 
                     const isCurrentDay = day === currentDay;
-                    const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                    const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
                     const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
 
                     return (
                       <td
@@ -452,6 +524,70 @@ export default function SummaryPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Table Footer Summary Byline ── */}
+      <div className="shrink-0 py-2.5 px-4 bg-slate-50 border-t border-slate-200/60 text-xs font-semibold text-slate-600 flex items-center justify-center flex-wrap gap-3">
+        {/* Shifts Section */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+            <span>Shifts:</span>
+            <span>{monthSummary.shiftCount}</span>
+          </span>
+          {DUTY_CODES.map(code => {
+            const count = monthSummary.shiftCounts[code] || 0;
+            if (count === 0) return null;
+            return (
+              <span key={code} className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-sm border ${DUTY_COLORS[code]}`}>
+                <span>{code}:</span>
+                <span>{pad2(count)}</span>
+              </span>
+            );
+          })}
+        </div>
+
+        {/* Divider */}
+        <span className="text-slate-300 px-1 text-sm font-light select-none">|</span>
+
+        {/* Leaves Section */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+            <span>Leaves:</span>
+            <span>{monthSummary.leaveTotal}d</span>
+          </span>
+          {LEAVE_CODE_ORDER.map(code => {
+            const count = monthSummary.leaveCounts[code] || 0;
+            if (count === 0) return null;
+            return (
+              <span key={code} className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-sm border ${LEAVE_COLORS[code]}`}>
+                <span>{code}:</span>
+                <span>{pad2(count)}d</span>
+              </span>
+            );
+          })}
+        </div>
+
+        {/* Overtime Section */}
+        {monthSummary.otHours > 0 && (
+          <>
+            <span className="text-slate-300 px-1 text-sm font-light select-none">|</span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-teal-700/90 text-white border-teal-800/90">
+              <span>OT:</span>
+              <span>{fmtHrs(monthSummary.otHours)}h</span>
+            </span>
+          </>
+        )}
+
+        {/* Short Leave Section */}
+        {monthSummary.slHours > 0 && (
+          <>
+            <span className="text-slate-300 px-1 text-sm font-light select-none">|</span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-violet-800/90 text-white border-violet-900/90">
+              <span>Short Leave:</span>
+              <span>{fmtHrs(monthSummary.slHours)}h</span>
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

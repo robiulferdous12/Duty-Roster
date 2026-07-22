@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { X, ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode } from '../types';
-import * as ExcelJS from 'exceljs';
+import { exportToExcel } from '../utils/excelExport';
 import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -153,16 +153,6 @@ export default function DutyRosterPage() {
     });
     return { total, counts };
   }, [filteredEmployees, grid, daysInMonth]);
-
-  const dutySummaryText = useMemo(() => {
-    const breakdown = DUTY_CODES
-      .filter(code => monthDutySummary.counts[code] > 0)
-      .map(code => `${code}=${pad2(monthDutySummary.counts[code])}`)
-      .join(', ');
-    return breakdown
-      ? `${monthDutySummary.total} shifts assigned this month (${breakdown})`
-      : `${monthDutySummary.total} shifts assigned this month`;
-  }, [monthDutySummary]);
 
   // Row index of each employee within the currently filtered list, so a
   // rectangular block of cells can be computed between any two employees.
@@ -354,56 +344,25 @@ export default function DutyRosterPage() {
       return;
     }
 
-    const FONT = { name: 'Cambria', size: 11 };
-
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Duty Roster');
-
-    sheet.columns = [
-      { header: 'Employee ID', key: 'id' },
-      { header: 'Name', key: 'name' },
-      { header: 'Date From (yyyy-mm-dd)', key: 'from', style: { numFmt: 'yyyy-mm-dd' } },
-      { header: 'Date To (yyyy-mm-dd)', key: 'to', style: { numFmt: 'yyyy-mm-dd' } },
-      { header: 'Total Days', key: 'totalDays' },
-      { header: 'Shift Name', key: 'shift' },
-      { header: 'Unit', key: 'unit' },
-    ];
-
-    rows.forEach(r => sheet.addRow(r));
-
-    // Apply Cambria to every cell, bold + centered on the header row, centered everywhere else
-    sheet.eachRow((row, rowNumber) => {
-      row.eachCell({ includeEmpty: true }, cell => {
-        cell.font = rowNumber === 1 ? { ...FONT, bold: true } : FONT;
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    try {
+      await exportToExcel({
+        filename: `DutyRoster_${MONTHS[month]}${year}_${pad2(fromDay)}-${pad2(toDay)}.xlsx`,
+        sheetName: 'Duty Roster',
+        columns: [
+          { header: 'Employee ID', key: 'id', align: 'center' },
+          { header: 'Name', key: 'name', align: 'left' },
+          { header: 'Date From (yyyy-mm-dd)', key: 'from', align: 'center', numFmt: 'yyyy-mm-dd' },
+          { header: 'Date To (yyyy-mm-dd)', key: 'to', align: 'center', numFmt: 'yyyy-mm-dd' },
+          { header: 'Total Days', key: 'totalDays', align: 'center' },
+          { header: 'Shift Name', key: 'shift', align: 'center' },
+          { header: 'Unit', key: 'unit', align: 'center' },
+        ],
+        rows,
       });
-    });
-
-    // Auto-fit each column's width to its widest header/content, so nothing is clipped or wraps
-    sheet.columns.forEach(column => {
-      let maxLength = column.header ? String(column.header).length : 10;
-      column.eachCell?.({ includeEmpty: true }, cell => {
-        const value = cell.value;
-        const display = value instanceof Date
-          ? (cell.numFmt?.length || 10) // dates render via numFmt (e.g. 'yyyy-mm-dd' = 10 chars)
-          : value != null
-            ? String(value).length
-            : 0;
-        if (display > maxLength) maxLength = display;
-      });
-      column.width = maxLength + 4; // padding so text isn't flush against the cell border
-    });
-
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `DutyRoster_${MONTHS[month]}${year}_${pad2(fromDay)}-${pad2(toDay)}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error(err);
+      alert('Export failed: ' + err.message);
+    }
 
     setShowExport(false);
   };
@@ -423,9 +382,6 @@ export default function DutyRosterPage() {
           </h1>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {filteredEmployees.length} staff · {daysInMonth} days · Drag or Shift+Click for a range · Ctrl+Click to multi-select
-          </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {dutySummaryText}
           </p>
         </div>
 
@@ -583,9 +539,9 @@ export default function DutyRosterPage() {
 
                     const isCurrentDay = day === currentDay;
                     const holidayTitle = activeHolidays[day];
-                    const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
+                    const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50' : '';
                     const currentDayHighlight = isCurrentDay && !isSelected ? 'bg-emerald-50' : '';
-                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
+                    const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50' : '';
 
                     return (
                       <td
@@ -613,6 +569,24 @@ export default function DutyRosterPage() {
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* ── Table Footer Summary Byline ── */}
+      <div className="shrink-0 py-2.5 px-4 bg-slate-50 border-t border-slate-200/60 text-xs font-semibold text-slate-600 flex items-center justify-center flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+          <span>Shifts:</span>
+          <span>{monthDutySummary.total}</span>
+        </span>
+        {DUTY_CODES.map(code => {
+          const count = monthDutySummary.counts[code] || 0;
+          if (count === 0) return null;
+          return (
+            <span key={code} className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-sm border ${DUTY_COLORS[code]}`}>
+              <span>{code}:</span>
+              <span>{pad2(count)}</span>
+            </span>
+          );
+        })}
       </div>
 
       {/* ── Floating Dropdown ── */}

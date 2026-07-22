@@ -19,36 +19,59 @@ function migrateLegacyRow(raw: any): RosterStore {
   return raw as RosterStore;
 }
 
-/** Load roster from Supabase, seeding from mock data on first run */
+const LOCAL_STORAGE_KEY = 'duty_roster_store_v1';
+
+/** Load roster from Supabase (or LocalStorage/mock data fallback) */
 export async function loadRoster(): Promise<RosterStore> {
-  const { data, error } = await supabase
-    .from('roster_state')
-    .select('data')
-    .eq('id', ROW_ID)
-    .maybeSingle();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('roster_state')
+        .select('data')
+        .eq('id', ROW_ID)
+        .maybeSingle();
 
-  if (error) {
-    console.error('Failed to load roster from Supabase:', error);
-    return { ...mockRosterStore };
+      if (!error && data?.data) {
+        return migrateLegacyRow(data.data);
+      }
+      if (!error && !data?.data) {
+        await saveRoster(mockRosterStore);
+        return { ...mockRosterStore };
+      }
+    } catch (err) {
+      console.error('Failed to load roster from Supabase:', err);
+    }
   }
 
-  if (data?.data) {
-    return migrateLegacyRow(data.data);
+  // Fallback to LocalStorage
+  try {
+    const localData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (localData) {
+      return migrateLegacyRow(JSON.parse(localData));
+    }
+  } catch (err) {
+    console.error('Failed to load from LocalStorage:', err);
   }
 
-  // No row yet — first run. Seed it.
-  await saveRoster(mockRosterStore);
   return { ...mockRosterStore };
 }
 
-/** Persist roster to Supabase */
+/** Persist roster to Supabase and LocalStorage */
 export async function saveRoster(store: RosterStore): Promise<void> {
-  const { error } = await supabase
-    .from('roster_state')
-    .upsert({ id: ROW_ID, data: store });
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(store));
+  } catch (err) {
+    console.error('Failed to save to LocalStorage:', err);
+  }
 
-  if (error) {
-    console.error('Failed to save roster to Supabase:', error);
+  if (supabase) {
+    const { error } = await supabase
+      .from('roster_state')
+      .upsert({ id: ROW_ID, data: store });
+
+    if (error) {
+      console.error('Failed to save roster to Supabase:', error);
+    }
   }
 }
 
@@ -58,3 +81,4 @@ export async function clearRoster(): Promise<RosterStore> {
   await saveRoster(fresh);
   return fresh;
 }
+

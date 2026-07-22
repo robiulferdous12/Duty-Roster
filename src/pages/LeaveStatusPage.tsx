@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { LeaveCode } from '../types';
-import { exportElementAsImage } from '../utils/exportImage';
+import { exportToExcel, formatExcelCell, type ExcelColumnDef } from '../utils/excelExport';
 import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -132,10 +132,112 @@ export default function LeaveStatusPage() {
   const tableRef = useRef<HTMLTableElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const handleExport = async () => {
-    if (!tableRef.current) return;
     setIsExporting(true);
     try {
-      await exportElementAsImage(tableRef.current, `LeaveStatus_${MONTHS[month]}${year}.png`);
+      if (viewMode === 'grid') {
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+        ];
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          columns.push({ header: String(d), key: `day_${d}`, align: 'center', width: 5 });
+        }
+
+        columns.push({ header: 'Total Leaves', key: 'totalLeaves', align: 'center', width: 14 });
+
+        const rows = filteredEmployees.map((emp, idx) => {
+          const empGrid = grid[emp.id] || [];
+          const rowData: Record<string, any> = {
+            sl: idx + 1,
+            id: emp.id,
+            name: emp.name,
+            desig: emp.designation || '',
+            team: emp.team || 'Electrical',
+          };
+
+          let leaveCount = 0;
+          for (let d = 1; d <= daysInMonth; d++) {
+            const leave = empGrid[d - 1]?.leave || '';
+            if (leave) leaveCount++;
+            rowData[`day_${d}`] = formatExcelCell(leave, 'leave');
+          }
+          rowData.totalLeaves = leaveCount;
+          return rowData;
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          totalLeaves: monthLeaveSummary.totalDays,
+        };
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          let dayLeaves = 0;
+          filteredEmployees.forEach(emp => {
+            if (grid[emp.id]?.[d - 1]?.leave) dayLeaves++;
+          });
+          totalRow[`day_${d}`] = dayLeaves > 0 ? dayLeaves : '-';
+        }
+
+        await exportToExcel({
+          filename: `LeaveStatus_${MONTHS[month]}${year}.xlsx`,
+          sheetName: `${MONTHS[month]} ${year}`,
+          columns,
+          rows,
+          totalRow,
+        });
+      } else {
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+          { header: 'From', key: 'from', align: 'center', width: 14, numFmt: 'yyyy-mm-dd' },
+          { header: 'To', key: 'to', align: 'center', width: 14, numFmt: 'yyyy-mm-dd' },
+          { header: 'Total Days', key: 'totalDays', align: 'center', width: 12 },
+          { header: 'Leave Type', key: 'leaveType', align: 'center', width: 14 },
+        ];
+
+        const rows = filteredLeaveList.map((en, idx) => ({
+          sl: idx + 1,
+          id: en.employeeId,
+          name: en.employeeName,
+          desig: en.employeeDesig,
+          team: en.employeeTeam,
+          from: en.fromIso,
+          to: en.toIso,
+          totalDays: en.totalDays,
+          leaveType: formatExcelCell(en.leaveType, 'leave'),
+        }));
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          from: '',
+          to: '',
+          totalDays: totalVisibleDays,
+          leaveType: '',
+        };
+
+        await exportToExcel({
+          filename: `LeaveStatus_List_${MONTHS[month]}${year}.xlsx`,
+          sheetName: 'Leave Records',
+          columns,
+          rows,
+          totalRow,
+        });
+      }
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
@@ -267,16 +369,6 @@ export default function LeaveStatusPage() {
     });
     return { totalRecords, totalDays, counts };
   }, [leaveEntries, selectedEmpIds, year, month, daysInMonth]);
-
-  const monthLeaveSummaryText = useMemo(() => {
-    const breakdown = LEAVE_CODES
-      .filter(code => monthLeaveSummary.counts[code] > 0)
-      .map(code => `${code}=${String(monthLeaveSummary.counts[code]).padStart(2, '0')}`)
-      .join(', ');
-    return breakdown
-      ? `${monthLeaveSummary.totalRecords} total records · ${monthLeaveSummary.totalDays} days on leave (${breakdown})`
-      : `${monthLeaveSummary.totalRecords} total records · ${monthLeaveSummary.totalDays} days on leave`;
-  }, [monthLeaveSummary]);
 
   const filteredLeaveList = useMemo(() => {
     return leaveEntries.filter(en => {
@@ -465,9 +557,6 @@ export default function LeaveStatusPage() {
               ? `${filteredEmployees.length} staff · ${daysInMonth} days · Drag or Shift+Click to bulk-edit`
               : `${filteredLeaveList.length} total records · ${totalVisibleDays} days on leave`}
           </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {monthLeaveSummaryText}
-          </p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -637,7 +726,7 @@ export default function LeaveStatusPage() {
                       key={day}
                       title={holidayTitle ? `Public Holiday: ${holidayTitle}` : undefined}
                       className={`sticky top-0 z-30 w-9 min-w-[36px] max-w-[36px] h-7 text-center font-medium border-r border-slate-700/40 text-[13px] leading-tight transition-colors bg-slate-800
-                      ${holidayTitle ? '!bg-red-900 text-red-50' : day === currentDay ? '!bg-emerald-700 text-emerald-50' : isFriday ? '!bg-red-900' : ''}
+                      ${holidayTitle ? '!bg-red-900 text-red-50' : day === currentDay ? '!bg-emerald-700 text-emerald-50' : isFriday ? '!bg-red-900 text-red-50' : ''}
                       ${hoverCol === day ? '!bg-slate-600' : ''}`}
                     >
                       {dow}
@@ -654,7 +743,7 @@ export default function LeaveStatusPage() {
                       key={day}
                       title={holidayTitle ? `Public Holiday: ${holidayTitle}` : undefined}
                       className={`sticky top-[28px] z-30 w-9 min-w-[36px] max-w-[36px] h-6 text-center text-[13.5px] font-semibold border-r border-slate-600/30 transition-colors bg-slate-700
-                      ${holidayTitle ? '!bg-red-800 text-white' : day === currentDay ? '!bg-emerald-600 text-white' : isFriday ? '!bg-red-800' : ''}
+                      ${holidayTitle ? '!bg-red-800 text-red-50' : day === currentDay ? '!bg-emerald-600 text-emerald-50' : isFriday ? '!bg-red-800 text-red-50' : ''}
                       ${hoverCol === day ? '!bg-slate-500' : ''}`}
                     >
                       {String(day).padStart(2, '0')}
@@ -721,9 +810,9 @@ export default function LeaveStatusPage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50' : '';
                       const currentDayHighlight = isCurrentDay && !isSelected ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay && !isSelected ? 'bg-rose-50' : '';
 
                       return (
                         <td
@@ -818,6 +907,24 @@ export default function LeaveStatusPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Table Footer Summary Byline ── */}
+      <div className="shrink-0 py-2.5 px-4 bg-slate-50 border-t border-slate-200/60 text-xs font-semibold text-slate-600 flex items-center justify-center flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+          <span>Leaves:</span>
+          <span>{monthLeaveSummary.totalDays}d</span>
+        </span>
+        {LEAVE_CODES.map(code => {
+          const count = monthLeaveSummary.counts[code] || 0;
+          if (count === 0) return null;
+          return (
+            <span key={code} className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-sm border ${LEAVE_COLORS[code]}`}>
+              <span>{code}:</span>
+              <span>{pad2(count)}d</span>
+            </span>
+          );
+        })}
       </div>
 
       {/* ── Floating Dropdown ── */}

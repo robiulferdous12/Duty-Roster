@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { ShortLeaveEntry } from '../types';
-import { exportElementAsImage } from '../utils/exportImage';
+import { exportToExcel, formatExcelCell, to12HourFormat, type ExcelColumnDef } from '../utils/excelExport';
 import TeamFilterDropdown from '../components/TeamFilterDropdown';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -113,10 +113,116 @@ export default function ShortLeavePage() {
   const tableRef = useRef<HTMLTableElement>(null);
   const [isExporting, setIsExporting] = useState(false);
   const handleExport = async () => {
-    if (!tableRef.current) return;
     setIsExporting(true);
     try {
-      await exportElementAsImage(tableRef.current, `ShortLeave_${viewMode}_${MONTHS[month]}${year}.png`);
+      if (viewMode === 'grid') {
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+        ];
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          columns.push({ header: String(d), key: `day_${d}`, align: 'center', width: 6 });
+        }
+
+        columns.push({ header: 'Total Short Leave (hrs)', key: 'totalSl', align: 'center', width: 20 });
+
+        const rows = filteredEmployees.map((emp, idx) => {
+          const empSl = currentMonthShortLeaveMap[emp.id] || {};
+          const rowData: Record<string, any> = {
+            sl: idx + 1,
+            id: emp.id,
+            name: emp.name,
+            desig: emp.designation || '',
+            team: emp.team || 'Electrical',
+          };
+
+          let sumSl = 0;
+          for (let d = 1; d <= daysInMonth; d++) {
+            const h = empSl[d] || 0;
+            if (h > 0) sumSl += h;
+            rowData[`day_${d}`] = h > 0 ? formatExcelCell(`${h}h`, 'sl') : formatExcelCell(null, 'sl');
+          }
+          rowData.totalSl = sumSl > 0 ? `${sumSl}h` : '0h';
+          return rowData;
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          totalSl: `${monthShortLeaveSummary.hours}h`,
+        };
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          let daySl = 0;
+          filteredEmployees.forEach(emp => {
+            const h = currentMonthShortLeaveMap[emp.id]?.[d] || 0;
+            daySl += h;
+          });
+          totalRow[`day_${d}`] = daySl > 0 ? `${daySl}h` : '-';
+        }
+
+        await exportToExcel({
+          filename: `ShortLeave_Grid_${MONTHS[month]}${year}.xlsx`,
+          sheetName: `${MONTHS[month]} ${year}`,
+          columns,
+          rows,
+          totalRow,
+        });
+      } else {
+        // List mode
+        const columns: ExcelColumnDef[] = [
+          { header: '#', key: 'sl', align: 'center', width: 6 },
+          { header: 'Staff ID', key: 'id', align: 'center', width: 12 },
+          { header: 'Name', key: 'name', align: 'left', width: 22 },
+          { header: 'Designation', key: 'desig', align: 'left', width: 20 },
+          { header: 'Team', key: 'team', align: 'left', width: 14 },
+          { header: 'Date', key: 'date', align: 'center', width: 14, numFmt: 'yyyy-mm-dd' },
+          { header: 'From', key: 'from', align: 'center', width: 10 },
+          { header: 'To', key: 'to', align: 'center', width: 10 },
+          { header: 'Total Hours', key: 'hours', align: 'center', width: 12 },
+        ];
+
+        const rows = filteredShortLeaveList.map((slEntry, idx) => {
+          return {
+            sl: idx + 1,
+            id: slEntry.employeeId,
+            name: slEntry.employeeName,
+            desig: slEntry.employeeDesig,
+            team: slEntry.employeeTeam,
+            date: slEntry.date,
+            from: to12HourFormat(slEntry.from),
+            to: to12HourFormat(slEntry.to),
+            hours: `${slEntry.totalHours}h`,
+          };
+        });
+
+        const totalRow: Record<string, any> = {
+          sl: '',
+          id: 'Total',
+          name: '',
+          desig: '',
+          team: '',
+          date: '',
+          from: '',
+          to: '',
+          hours: `${totalVisibleHours}h`,
+        };
+
+        await exportToExcel({
+          filename: `ShortLeave_List_${MONTHS[month]}${year}.xlsx`,
+          sheetName: 'Short Leave Directory',
+          columns,
+          rows,
+          totalRow,
+        });
+      }
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
@@ -190,11 +296,6 @@ export default function ShortLeavePage() {
     });
     return { count, hours };
   }, [shortLeaveEntries, year, month, selectedEmpIds]);
-
-  const monthShortLeaveSummaryText = useMemo(() => {
-    const hrsDisplay = Number.isInteger(monthShortLeaveSummary.hours) ? monthShortLeaveSummary.hours : monthShortLeaveSummary.hours.toFixed(1);
-    return `${monthShortLeaveSummary.count} total entries recorded · ${hrsDisplay} hours Short Leave this month`;
-  }, [monthShortLeaveSummary]);
 
   // ── Date preset helpers (List view) ──
   const todayStr = useMemo(() => {
@@ -362,9 +463,6 @@ export default function ShortLeavePage() {
             {viewMode === 'grid'
               ? `${filteredEmployees.length} staff · ${daysInMonth} days · Click a day to log Short Leave`
               : `${filteredShortLeaveList.length} total entries recorded · ${totalVisibleHours} hours Short Leave`}
-          </p>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-            {monthShortLeaveSummaryText}
           </p>
         </div>
 
@@ -534,7 +632,7 @@ export default function ShortLeavePage() {
                       key={day}
                       title={holidayTitle ? `Public Holiday: ${holidayTitle}` : undefined}
                       className={`sticky top-[28px] z-30 w-9 min-w-[36px] max-w-[36px] h-6 text-center text-[13.5px] font-semibold border-r border-slate-600/30 transition-colors bg-slate-700
-                        ${holidayTitle ? '!bg-red-800 text-white' : day === currentDay ? '!bg-emerald-600 text-white' : isFriday ? '!bg-red-800' : ''}
+                        ${holidayTitle ? '!bg-red-800 text-red-50' : day === currentDay ? '!bg-emerald-600 text-emerald-50' : isFriday ? '!bg-red-800 text-red-50' : ''}
                         ${hoverCol === day ? '!bg-slate-500' : ''}`}
                     >
                       {String(day).padStart(2, '0')}
@@ -599,9 +697,9 @@ export default function ShortLeavePage() {
 
                       const isCurrentDay = day === currentDay;
                       const holidayTitle = activeHolidays[day];
-                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                      const holidayHighlight = holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
                       const currentDayHighlight = isCurrentDay ? 'bg-emerald-50' : '';
-                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50/30' : '';
+                      const fridayTint = isFriday && !holidayTitle && !isCurrentDay ? 'bg-rose-50' : '';
 
                       const dateStr = `${year}-${pad2(month + 1)}-${pad2(day)}`;
 
@@ -702,6 +800,18 @@ export default function ShortLeavePage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── Table Footer Summary Byline ── */}
+      <div className="shrink-0 py-2.5 px-4 bg-slate-50 border-t border-slate-200/60 text-xs font-semibold text-slate-600 flex items-center justify-center flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-slate-800 text-white border-slate-900">
+          <span>Records:</span>
+          <span>{monthShortLeaveSummary.count}</span>
+        </span>
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 text-[11px] font-bold rounded-sm border bg-indigo-100/80 text-indigo-800 border-indigo-200/80">
+          <span>Short Leave:</span>
+          <span>{Number.isInteger(monthShortLeaveSummary.hours) ? monthShortLeaveSummary.hours : monthShortLeaveSummary.hours.toFixed(1)}h</span>
+        </span>
       </div>
 
       {/* ── Log/Edit Short Leave Modal (shared by Grid and List views) ── */}
