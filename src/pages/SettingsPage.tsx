@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Plus, Trash2, Save, X, Edit2, Calendar, PartyPopper, Users, Contact, RotateCcw, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Save, X, Edit2, Calendar, PartyPopper, Users, Contact, RotateCcw, AlertCircle, UserCheck } from 'lucide-react';
 import type { Employee, PublicHoliday, CepEntry } from '../types';
+import UserManagement from '../components/UserManagement';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const TEAMS = ['Electrical', 'Mechanical', 'Store', 'Substation', 'Paints'] as const;
 const DAYS_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-type TabId = 'employees' | 'holidays' | 'cep' | 'reset';
+type TabId = 'employees' | 'holidays' | 'cep' | 'users' | 'reset';
 
 // ── Helper: expand a date range into individual dates ──
 function pad2(n: number): string {
@@ -42,7 +43,16 @@ function formatDateToDMY(dateStr: string): string {
 }
 
 export default function SettingsPage() {
-  const { roster, updateEmployees, setRosterMonth, updatePublicHolidays, updateCepDirectory, resetField, clearOvertimeForCurrentMonth, clearShortLeaveForCurrentMonth } = useApp();
+  const {
+    roster,
+    updateEmployees,
+    setRosterMonth,
+    updatePublicHolidays,
+    updateCepDirectory,
+    resetField,
+    clearOvertimeForCurrentMonth,
+    clearShortLeaveForCurrentMonth,
+  } = useApp();
   const { employees, year, month, publicHolidays = [], cepDirectory = [] } = roster;
 
   // ── Active tab ──
@@ -265,7 +275,7 @@ export default function SettingsPage() {
     <div className="max-w-4xl mx-auto p-5 space-y-6">
       <div>
         <h1 className="text-lg font-bold text-slate-800 tracking-tight">System Settings</h1>
-        <p className="text-[11px] text-slate-400 mt-0.5">Configure personnel roster and scheduling timeline.</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">Configure personnel roster, database backups, and scheduling timeline.</p>
       </div>
 
       {/* ── Active Month Setup ── */}
@@ -314,14 +324,14 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* ── Tabbed Section: Employee Directory / Public Holidays ── */}
+      {/* ── Tabbed Section ── */}
       <div className="bg-white border border-slate-200/60 rounded">
         {/* Tab header bar */}
         <div className="px-4 border-b border-slate-200/60 bg-slate-50/50 flex items-center justify-between">
-          <div className="flex items-center -mb-px">
+          <div className="flex items-center -mb-px overflow-x-auto">
             <button
               onClick={() => setActiveTab('employees')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'employees'
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'employees'
                 ? 'border-slate-800 text-slate-800'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
@@ -331,7 +341,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('holidays')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'holidays'
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'holidays'
                 ? 'border-slate-800 text-slate-800'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
@@ -341,7 +351,7 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={() => setActiveTab('cep')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'cep'
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'cep'
                 ? 'border-slate-800 text-slate-800'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
@@ -350,8 +360,18 @@ export default function SettingsPage() {
               CEP Directory ({localCep.length})
             </button>
             <button
+              onClick={() => setActiveTab('users')}
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'users'
+                ? 'border-slate-800 text-slate-800'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+                }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              App Users
+            </button>
+            <button
               onClick={() => setActiveTab('reset')}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors ${activeTab === 'reset'
+              className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${activeTab === 'reset'
                 ? 'border-slate-800 text-slate-800'
                 : 'border-transparent text-slate-400 hover:text-slate-600'
                 }`}
@@ -365,7 +385,7 @@ export default function SettingsPage() {
           {activeTab === 'employees' && (
             <button
               onClick={() => setShowAdd(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors whitespace-nowrap ml-2"
             >
               <Plus className="w-3 h-3" /> Add Staff
             </button>
@@ -373,7 +393,7 @@ export default function SettingsPage() {
           {activeTab === 'holidays' && (
             <button
               onClick={() => setShowAddHoliday(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors whitespace-nowrap ml-2"
             >
               <Plus className="w-3 h-3" /> Add Holiday
             </button>
@@ -381,7 +401,7 @@ export default function SettingsPage() {
           {activeTab === 'cep' && (
             <button
               onClick={() => setShowAddCep(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-white bg-slate-800 hover:bg-slate-700 rounded transition-colors whitespace-nowrap ml-2"
             >
               <Plus className="w-3 h-3" /> Add CEP
             </button>
@@ -477,7 +497,7 @@ export default function SettingsPage() {
                   </tr>
                 ))}
                 {localEmployees.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-xs">No employees configured.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs">No employees configured.</td></tr>
                 )}
               </tbody>
             </table>
@@ -609,6 +629,13 @@ export default function SettingsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* ── User Management Content ── */}
+        {activeTab === 'users' && (
+          <div className="py-2">
+            <UserManagement />
           </div>
         )}
 

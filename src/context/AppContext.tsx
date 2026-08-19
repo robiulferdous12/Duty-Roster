@@ -1,6 +1,21 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from 'react';
 import type { MonthlyRoster, RosterStore, Employee, DutyCode, LeaveCode, PublicHoliday, CepEntry, OvertimeEntry, ShortLeaveEntry, DayEntry } from '../types';
-import { loadRoster, saveRoster } from '../utils/storage';
+import {
+  loadRoster,
+  saveRoster,
+  saveAppSettings,
+  saveRosterCellDb,
+  resetRosterFieldDb,
+  syncEmployeesDb,
+  syncPublicHolidaysDb,
+  syncCepDirectoryDb,
+  syncOvertimeDb,
+  syncShortLeaveDb,
+  clearOvertimeCurrentMonthDb,
+  clearShortLeaveCurrentMonthDb,
+  formatEntryDate,
+  importFullBackup,
+} from '../utils/storage';
 import { monthKey } from '../utils/monthKey';
 
 interface AppContextValue {
@@ -25,6 +40,8 @@ interface AppContextValue {
   clearOvertimeForCurrentMonth: () => void;
   /** Clears only the short leave entries that fall within the currently selected month. */
   clearShortLeaveForCurrentMonth: () => void;
+  /** Imports full JSON backup directly into Supabase and updates app state */
+  importBackup: (backup: string | any) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -48,21 +65,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Fire-and-forget background save; UI already updated optimistically via setStore.
-  const persist = useCallback((updated: RosterStore) => {
-    saveRoster(updated).catch((err) => console.error('Failed to save roster:', err));
-  }, []);
-
   const setRosterMonth = useCallback((year: number, month: number) => {
     setStore((prev) => {
       if (!prev) return prev;
-      // Only the "which month am I viewing" pointer changes here — each
-      // month's grid data lives under its own key and is left untouched.
       const updated = { ...prev, year, month };
-      persist(updated);
+      saveAppSettings(year, month).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updateRosterCell = useCallback((
     employeeId: string,
@@ -83,10 +94,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         ...prev,
         monthlyGrids: { ...prev.monthlyGrids, [key]: { ...monthGrid, [employeeId]: empGrid } },
       };
-      persist(updated);
+
+      const dateStr = formatEntryDate(y, m, dayIndex + 1);
+      saveRosterCellDb(employeeId, dateStr, updates).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
+
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   // Clears the given field for the CURRENTLY SELECTED month's grid only —
   // every other month's data is left completely untouched.
@@ -108,10 +123,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         });
       });
       const updated = { ...prev, monthlyGrids: { ...prev.monthlyGrids, [key]: newMonthGrid } };
-      persist(updated);
+      resetRosterFieldDb(prev.year, prev.month, field).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updateEmployees = useCallback((employees: Employee[]) => {
     setStore((prev) => {
@@ -129,46 +145,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
 
       const updated = { ...prev, employees, monthlyGrids: newMonthlyGrids };
-      persist(updated);
+      syncEmployeesDb(employees).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updateCepDirectory = useCallback((entries: CepEntry[]) => {
     setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, cepDirectory: entries };
-      persist(updated);
+      syncCepDirectoryDb(entries).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updatePublicHolidays = useCallback((holidays: PublicHoliday[]) => {
     setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, publicHolidays: holidays };
-      persist(updated);
+      syncPublicHolidaysDb(holidays).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updateOvertime = useCallback((entries: OvertimeEntry[]) => {
     setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, overtime: entries };
-      persist(updated);
+      syncOvertimeDb(entries).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const updateShortLeaveEntries = useCallback((entries: ShortLeaveEntry[]) => {
     setStore((prev) => {
       if (!prev) return prev;
       const updated = { ...prev, shortLeaveEntries: entries };
-      persist(updated);
+      syncShortLeaveDb(entries).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const clearOvertimeForCurrentMonth = useCallback(() => {
     setStore((prev) => {
@@ -178,10 +199,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return !(d.getFullYear() === prev.year && d.getMonth() === prev.month);
       });
       const updated = { ...prev, overtime: remaining };
-      persist(updated);
+      clearOvertimeCurrentMonthDb(prev.year, prev.month).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
 
   const clearShortLeaveForCurrentMonth = useCallback(() => {
     setStore((prev) => {
@@ -191,10 +213,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return !(d.getFullYear() === prev.year && d.getMonth() === prev.month);
       });
       const updated = { ...prev, shortLeaveEntries: remaining };
-      persist(updated);
+      clearShortLeaveCurrentMonthDb(prev.year, prev.month).catch((err) => console.error(err));
+      saveRoster(updated).catch((err) => console.error(err));
       return updated;
     });
-  }, [persist]);
+  }, []);
+
+  const importBackup = useCallback(async (backup: string | any) => {
+    const updatedStore = await importFullBackup(backup);
+    setStore(updatedStore);
+  }, []);
 
   // Derive the page-facing roster: identical shape to before, with `grid`
   // scoped to whichever month is currently selected.
@@ -246,6 +274,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateShortLeaveEntries,
       clearOvertimeForCurrentMonth,
       clearShortLeaveForCurrentMonth,
+      importBackup,
     }}>
       {children}
     </AppContext.Provider>

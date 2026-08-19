@@ -88,3 +88,77 @@ export interface RosterStore {
   overtime?: OvertimeEntry[];
   shortLeaveEntries?: ShortLeaveEntry[];
 }
+
+// ── Database Row Models (Supabase Relational Tables) ──
+
+export interface DbAppSettings {
+  id: number;
+  year: number;
+  month: number;
+  updated_at?: string;
+}
+
+export interface DbEmployee {
+  id: string;
+  name: string;
+  designation: string;
+  team: string | null;
+  phone: string | null;
+  display_order: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbPublicHoliday {
+  id: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbCepEntry {
+  id: string;
+  name: string;
+  number: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbRosterEntry {
+  id?: string;
+  employee_id: string;
+  date: string;
+  duty: string | null;
+  leave: string | null;
+  short_leave: number | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbOvertimeEntry {
+  id: string;
+  employee_id: string | null;
+  date: string;
+  from_time: string;
+  to_time: string;
+  total_hours: number;
+  cep_id: string | null;
+  cep_name: string | null;
+  cep_number: string | null;
+  lunch_break: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface DbShortLeaveEntry {
+  id: string;
+  employee_id: string;
+  date: string;
+  from_time: string;
+  to_time: string;
+  total_hours: number;
+  created_at?: string;
+  updated_at?: string;
+}

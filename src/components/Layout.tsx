@@ -1,17 +1,24 @@
 import { type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { CalendarRange, Settings, CalendarDays, Clock, Timer, LayoutList, Code2 } from 'lucide-react';
+import { CalendarRange, Settings, CalendarDays, Clock, Timer, LayoutList, Code2, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Duty Roster', icon: CalendarRange },
-  { to: '/leave', label: 'Leave Status', icon: CalendarDays },
-  { to: '/short-leave', label: 'Short Leave', icon: Clock },
-  { to: '/overtime', label: 'Overtime', icon: Timer },
-  { to: '/summary', label: 'Summary', icon: LayoutList },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/', label: 'Duty Roster', icon: CalendarRange, roles: ['admin', 'user'] },
+  { to: '/leave', label: 'Leave Status', icon: CalendarDays, roles: ['admin', 'user'] },
+  { to: '/short-leave', label: 'Short Leave', icon: Clock, roles: ['admin', 'user'] },
+  { to: '/overtime', label: 'Overtime', icon: Timer, roles: ['admin'] },
+  { to: '/summary', label: 'Summary', icon: LayoutList, roles: ['admin', 'user'] },
+  { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
 ];
 
 export default function Layout({ children }: { children: ReactNode }) {
+  const { user, logout } = useAuth();
+  const currentRole = user?.role || 'user';
+
+  // Filter nav items based on role
+  const visibleNavItems = NAV_ITEMS.filter(item => item.roles.includes(currentRole));
+
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
       {/* ── Top Navigation Bar ── */}
@@ -33,7 +40,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
           {/* Nav Links */}
           <nav className="flex items-center gap-1">
-            {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+            {visibleNavItems.map(({ to, label, icon: Icon }) => (
               <NavLink
                 key={to}
                 to={to}
@@ -49,6 +56,18 @@ export default function Layout({ children }: { children: ReactNode }) {
                 {label}
               </NavLink>
             ))}
+            
+            {/* Logout button */}
+            {user && (
+              <button
+                onClick={logout}
+                className="ml-2 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold tracking-wide text-rose-600 hover:bg-rose-50 hover:text-rose-700 rounded transition-all"
+                title="Log out"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            )}
           </nav>
         </div>
       </header>
