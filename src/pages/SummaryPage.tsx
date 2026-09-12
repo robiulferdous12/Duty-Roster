@@ -12,11 +12,13 @@ const DUTY_COLORS: Record<string, string> = {
   A: 'bg-sky-100/80 text-sky-800 border-sky-200/80',
   B: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
   C: 'bg-amber-100/80 text-amber-800 border-amber-200/80',
+  G: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
+  ADJ: 'bg-orange-100/80 text-orange-800 border-orange-200/80',
   M: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
   H: 'bg-rose-50 text-rose-700 border-rose-200/80',
 };
 
-const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'M', 'H'];
+const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'G', 'ADJ', 'H'];
 
 const LEAVE_COLORS: Record<string, string> = {
   SL: 'bg-indigo-100/80 text-indigo-800 border-indigo-200/80',
@@ -258,9 +260,11 @@ export default function SummaryPage() {
       const empGrid = grid[emp.id] || [];
       for (let d = 1; d <= daysInMonth; d++) {
         const entry = empGrid[d - 1];
-        if (entry?.duty) {
+        const rawDuty = entry?.duty;
+        const duty = rawDuty === 'M' ? 'G' : rawDuty;
+        if (duty) {
           shiftCount++;
-          shiftCounts[entry.duty] = (shiftCounts[entry.duty] || 0) + 1;
+          shiftCounts[duty] = (shiftCounts[duty] || 0) + 1;
         }
         if (entry?.leave) {
           leaveTotal++;
@@ -296,11 +300,13 @@ export default function SummaryPage() {
     const isSubstation = team === 'Substation';
     const forceHoliday = isHolidayOrFriday && !isSubstation;
 
+    const effectiveDuty = duty === 'M' ? 'G' : duty;
+
     if (otHrs !== undefined && shortLeaveHrs !== undefined) {
-      return { text: `${duty}+${fmtHrs(otHrs)}-${fmtHrs(shortLeaveHrs)}`, className: OT_COLOR };
+      return { text: `${effectiveDuty}+${fmtHrs(otHrs)}-${fmtHrs(shortLeaveHrs)}`, className: OT_COLOR };
     }
     if (otHrs !== undefined) {
-      return { text: `${duty}+${fmtHrs(otHrs)}`, className: OT_COLOR };
+      return { text: `${effectiveDuty}+${fmtHrs(otHrs)}`, className: OT_COLOR };
     }
 
     // No overtime logged — Friday/Holiday override wins over shift/short-leave display.
@@ -309,10 +315,10 @@ export default function SummaryPage() {
     }
 
     if (shortLeaveHrs !== undefined) {
-      return { text: `${duty}-${fmtHrs(shortLeaveHrs)}`, className: SHORT_LEAVE_COLOR };
+      return { text: `${effectiveDuty}-${fmtHrs(shortLeaveHrs)}`, className: SHORT_LEAVE_COLOR };
     }
-    if (duty) {
-      return { text: duty, className: DUTY_COLORS[duty] || '' };
+    if (effectiveDuty) {
+      return { text: effectiveDuty, className: DUTY_COLORS[effectiveDuty] || '' };
     }
     return null;
   }

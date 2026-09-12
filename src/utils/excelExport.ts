@@ -168,7 +168,8 @@ export const EXCEL_COLORS: Record<string, { fillColor: string; textColor: string
   A: { fillColor: 'FFE0F2FE', textColor: 'FF0369A1' },  // Sky
   B: { fillColor: 'FFD1FAE5', textColor: 'FF065F46' },  // Emerald
   C: { fillColor: 'FFFEF3C7', textColor: 'FF92400E' },  // Amber
-  M: { fillColor: 'FFF3E8FF', textColor: 'FF5B21B6' },  // Violet
+  G: { fillColor: 'FFF3E8FF', textColor: 'FF5B21B6' },  // Violet (General)
+  M: { fillColor: 'FFF3E8FF', textColor: 'FF5B21B6' },  // Violet (fallback/legacy)
   H: { fillColor: 'FFFFF1F2', textColor: 'FFBE123C' },  // Rose (Holiday/Friday)
   
   // Leaves
@@ -188,34 +189,42 @@ export function formatExcelCell(val: any, context?: 'duty' | 'leave' | 'ot' | 's
     return { value: '-' };
   }
   
-  const key = String(val).toUpperCase();
+  let formattedVal = val;
+  if (context === 'duty' && typeof formattedVal === 'string') {
+    // Replace shift M with G (e.g., "M" -> "G", "M+2" -> "G+2", "M-1" -> "G-1")
+    if (formattedVal === 'M' || formattedVal.startsWith('M+') || formattedVal.startsWith('M-')) {
+      formattedVal = 'G' + formattedVal.slice(1);
+    }
+  }
+
+  const key = String(formattedVal).toUpperCase();
   
   if (context === 'leave' && key === 'A') {
-    return { value: val, ...EXCEL_COLORS.ABSENT };
+    return { value: formattedVal, ...EXCEL_COLORS.ABSENT };
   }
 
   if (context === 'ot') {
-    return { value: val, ...EXCEL_COLORS.OT };
+    return { value: formattedVal, ...EXCEL_COLORS.OT };
   }
 
   if (context === 'sl') {
-    return { value: val, ...EXCEL_COLORS.SHORT_LEAVE };
+    return { value: formattedVal, ...EXCEL_COLORS.SHORT_LEAVE };
   }
 
   if (context === 'duty') {
     if (key.includes('+')) {
-      return { value: val, ...EXCEL_COLORS.OT };
+      return { value: formattedVal, ...EXCEL_COLORS.OT };
     }
     if (key.includes('-') && /\d/.test(key)) {
-      return { value: val, ...EXCEL_COLORS.SHORT_LEAVE };
+      return { value: formattedVal, ...EXCEL_COLORS.SHORT_LEAVE };
     }
   }
   
   if (EXCEL_COLORS[key]) {
-    return { value: val, ...EXCEL_COLORS[key] };
+    return { value: formattedVal, ...EXCEL_COLORS[key] };
   }
   
-  return { value: val };
+  return { value: formattedVal };
 }
 
 export function to12HourFormat(timeStr: string): string {

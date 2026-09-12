@@ -25,16 +25,19 @@ const DUTY_COLORS: Record<string, string> = {
   A: 'bg-sky-100/80 text-sky-800 border-sky-200/80',
   B: 'bg-emerald-100/80 text-emerald-800 border-emerald-200/80',
   C: 'bg-amber-100/80 text-amber-800 border-amber-200/80',
+  G: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
+  ADJ: 'bg-orange-100/80 text-orange-800 border-orange-200/80',
   M: 'bg-violet-100/80 text-violet-800 border-violet-200/80',
   H: 'bg-rose-50 text-rose-700 border-rose-200/80',
 };
 
-const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'M', 'H'];
+const DUTY_CODES: DutyCode[] = ['A', 'B', 'C', 'G', 'ADJ', 'H'];
 const DUTY_LABELS: Record<string, string> = {
   A: 'Morning',
   B: 'Evening',
   C: 'Night',
-  M: 'General',
+  G: 'General',
+  ADJ: 'Adjustment',
   H: 'Holiday / Off',
 };
 
@@ -144,7 +147,8 @@ export default function DutyRosterPage() {
     filteredEmployees.forEach(emp => {
       const empGrid = grid[emp.id] || [];
       for (let d = 1; d <= daysInMonth; d++) {
-        const duty = empGrid[d - 1]?.duty;
+        const rawDuty = empGrid[d - 1]?.duty;
+        const duty = rawDuty === 'M' ? 'G' : rawDuty;
         if (duty) {
           total++;
           counts[duty] = (counts[duty] || 0) + 1;
@@ -328,7 +332,8 @@ export default function DutyRosterPage() {
 
       for (let day = fromDay; day <= toDay; day++) {
         const rawDuty = empGrid[day - 1]?.duty || '';
-        const duty = rawDuty.includes('H') ? '' : rawDuty; // exclude shifts containing 'H' (Holiday) from export
+        let duty = rawDuty.includes('H') ? '' : rawDuty; // exclude shifts containing 'H' (Holiday) from export
+        if (duty === 'M') duty = 'G';
         if (duty === runShift && runStartDay !== null) continue; // still in the same run
         closeRun(day - 1);
         if (duty) {
@@ -556,8 +561,8 @@ export default function DutyRosterPage() {
                       >
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                           {duty && (
-                            <span className={`inline-flex items-center justify-center w-[30px] h-[18px] text-[11px] font-bold rounded-sm border ${DUTY_COLORS[duty] || ''}`}>
-                              {duty}
+                            <span className={`inline-flex items-center justify-center min-w-[30px] h-[18px] px-0.5 ${duty === 'ADJ' ? 'text-[10px]' : 'text-[11px]'} font-bold rounded-sm border ${DUTY_COLORS[duty] || ''}`}>
+                              {duty === 'M' ? 'G' : duty}
                             </span>
                           )}
                         </div>
@@ -595,7 +600,7 @@ export default function DutyRosterPage() {
           ref={dropdownRef}
           className="fixed z-50 w-44 bg-white border border-slate-200/80 shadow-lg shadow-slate-200/50 rounded animate-fade-in"
           style={{
-            top: Math.min(dropdown.y + 4, window.innerHeight - 220),
+            top: Math.min(dropdown.y + 4, window.innerHeight - 260),
             left: Math.min(dropdown.x - 50, window.innerWidth - 190),
           }}
         >
@@ -616,7 +621,7 @@ export default function DutyRosterPage() {
                 onClick={() => applyCode(code)}
                 className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold transition-colors hover:opacity-80 border ${DUTY_COLORS[code]}`}
               >
-                <span className="w-5 text-center">{code}</span>
+                <span className="min-w-[28px] text-center font-bold">{code}</span>
                 <span className="text-[10px] font-normal opacity-70">{DUTY_LABELS[code]}</span>
               </button>
             ))}

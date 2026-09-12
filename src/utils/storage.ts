@@ -228,7 +228,7 @@ export async function loadRoster(): Promise<RosterStore> {
           }
 
           monthlyGrids[mKey][row.employee_id][dayIndex] = {
-            duty: (row.duty as DutyCode) || undefined,
+            duty: (row.duty === 'M' ? 'G' : (row.duty as DutyCode)) || undefined,
             leave: (row.leave as LeaveCode) || undefined,
             shortLeave: row.short_leave !== null ? Number(row.short_leave) : undefined,
           };
@@ -334,9 +334,24 @@ export async function saveRosterCellDb(
 ): Promise<void> {
   if (!supabase) return;
   try {
+    // Fetch the existing row first so we can merge fields.
+    // Without this, upserting a partial payload (e.g. only `duty`) would
+    // overwrite the other columns (`leave`, `short_leave`) with null,
+    // silently deleting data that was already saved.
+    const { data: existing } = await supabase
+      .from('roster_entries')
+      .select('duty, leave, short_leave')
+      .eq('employee_id', employeeId)
+      .eq('date', dateStr)
+      .maybeSingle();
+
     const payload: Partial<DbRosterEntry> = {
       employee_id: employeeId,
       date: dateStr,
+      // Start from existing values (if any), then layer the incoming updates on top
+      duty: existing?.duty ?? null,
+      leave: existing?.leave ?? null,
+      short_leave: existing?.short_leave ?? null,
     };
 
     if (updates.duty !== undefined) {

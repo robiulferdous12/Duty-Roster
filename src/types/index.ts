@@ -1,5 +1,5 @@
-// ── Shift/duty codes only: A, B, C, M, H ──
-export type DutyCode = 'A' | 'B' | 'C' | 'M' | 'H' | '';
+// ── Shift/duty codes: A, B, C, G, ADJ, H ──
+export type DutyCode = 'A' | 'B' | 'C' | 'G' | 'ADJ' | 'H' | 'M' | '';
 
 // ── Leave codes: SL, PL, LFA, ADJ, A ──
 export type LeaveCode = 'SL' | 'PL' | 'LFA' | 'ADJ' | 'A' | '';
