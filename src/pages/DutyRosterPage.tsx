@@ -67,7 +67,7 @@ export default function DutyRosterPage() {
   const { year, month, employees, grid } = roster;
 
   // ── Column visibility & Team filter ──
-  const [showDesig, setShowDesig] = useState<boolean>(true);
+  const [showDesig, setShowDesig] = useState<boolean>(false);
   const [showTeam, setShowTeam] = useState<boolean>(true);
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
@@ -323,7 +323,7 @@ export default function DutyRosterPage() {
             to: new Date(Date.UTC(year, month, endDay)),
             totalDays: endDay - runStartDay + 1,
             shift: runShift,
-            unit: 'Unit1',
+            unit: '',
           });
         }
         runStartDay = null;
@@ -355,10 +355,8 @@ export default function DutyRosterPage() {
         sheetName: 'Duty Roster',
         columns: [
           { header: 'Employee ID', key: 'id', align: 'center' },
-          { header: 'Name', key: 'name', align: 'left' },
           { header: 'Date From (yyyy-mm-dd)', key: 'from', align: 'center', numFmt: 'yyyy-mm-dd' },
           { header: 'Date To (yyyy-mm-dd)', key: 'to', align: 'center', numFmt: 'yyyy-mm-dd' },
-          { header: 'Total Days', key: 'totalDays', align: 'center' },
           { header: 'Shift Name', key: 'shift', align: 'center' },
           { header: 'Unit', key: 'unit', align: 'center' },
         ],
