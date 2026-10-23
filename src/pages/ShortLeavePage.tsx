@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import { useColumnVisibility } from '../utils/useColumnVisibility';
 import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { ShortLeaveEntry } from '../types';
@@ -81,8 +82,7 @@ export default function ShortLeavePage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // ── Column visibility & Team filter ──
-  const [showDesig, setShowDesig] = useState<boolean>(true);
-  const [showTeam, setShowTeam] = useState<boolean>(true);
+  const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('shortLeave');
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('thisMonth');
   const [filterStartDate, setFilterStartDate] = useState<string>('');

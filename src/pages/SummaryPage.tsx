@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef } from 'react';
+import { useColumnVisibility } from '../utils/useColumnVisibility';
 import { ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode, LeaveCode } from '../types';
@@ -69,8 +70,7 @@ export default function SummaryPage() {
   const { year, month, employees, grid } = roster;
 
   // ── Column visibility & Team filter ──
-  const [showDesig, setShowDesig] = useState<boolean>(true);
-  const [showTeam, setShowTeam] = useState<boolean>(true);
+  const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('summary');
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
   // ── Export ──

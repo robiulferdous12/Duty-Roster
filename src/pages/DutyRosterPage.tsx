@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useColumnVisibility } from '../utils/useColumnVisibility';
 import { X, ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode } from '../types';
@@ -67,8 +68,7 @@ export default function DutyRosterPage() {
   const { year, month, employees, grid } = roster;
 
   // ── Column visibility & Team filter ──
-  const [showDesig, setShowDesig] = useState<boolean>(false);
-  const [showTeam, setShowTeam] = useState<boolean>(true);
+  const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('dutyRoster');
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
 
   // ── Dynamic sticky offsets ──

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { useColumnVisibility } from '../utils/useColumnVisibility';
 import { X, ChevronsLeft, ChevronsRight, Plus, Trash2, Edit2, LayoutGrid, List, Contact, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { OvertimeEntry } from '../types';
@@ -265,8 +266,7 @@ export default function OvertimePage() {
   }, [selectedCepIds]);
 
   // Column visibility & Team filter
-  const [showDesig, setShowDesig] = useState<boolean>(true);
-  const [showTeam, setShowTeam] = useState<boolean>(true);
+  const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('overtime');
   const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
   const [filterCep, setFilterCep] = useState<string>('All');
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('thisMonth');
