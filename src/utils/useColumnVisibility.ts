@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { getColumnVisibility, setColumnVisibility } from './columnVisibility';
 
-type PageKey = 'summary' | 'leave' | 'shortLeave' | 'overtime';
+type PageKey = 'summary' | 'leave' | 'shortLeave' | 'overtime' | 'dutyRoster';
 
 /**
  * React hook that reads/writes the in-memory column visibility store.
