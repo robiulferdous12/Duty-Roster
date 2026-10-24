@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useColumnVisibility } from '../utils/useColumnVisibility';
+import { useTeamFilter } from '../utils/useTeamFilter';
 import { X, ChevronsLeft, ChevronsRight, Download, Plus, Trash2, Edit2, LayoutGrid, List } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { LeaveCode } from '../types';
@@ -92,7 +93,7 @@ export default function LeaveStatusPage() {
 
   // ── Column visibility & Team filter ──
   const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('leave');
-  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  const [selectedEmpIds, setSelectedEmpIds] = useTeamFilter();
   const [filterLeaveType, setFilterLeaveType] = useState<string>('All');
   const [filterDatePreset, setFilterDatePreset] = useState<'all' | 'today' | 'thisMonth' | 'lastMonth' | 'custom'>('all');
   const [filterStartDate, setFilterStartDate] = useState<string>('');

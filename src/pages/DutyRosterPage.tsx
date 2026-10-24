@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useColumnVisibility } from '../utils/useColumnVisibility';
+import { useTeamFilter } from '../utils/useTeamFilter';
 import { X, ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode } from '../types';
@@ -69,7 +70,7 @@ export default function DutyRosterPage() {
 
   // ── Column visibility & Team filter ──
   const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('dutyRoster');
-  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  const [selectedEmpIds, setSelectedEmpIds] = useTeamFilter();
 
   // ── Dynamic sticky offsets ──
   const desigLeft = BASE_LEFT; // always 304 (right after Name)

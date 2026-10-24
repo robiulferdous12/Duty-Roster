@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { useColumnVisibility } from '../utils/useColumnVisibility';
+import { useTeamFilter } from '../utils/useTeamFilter';
 import { ChevronsLeft, ChevronsRight, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import type { DutyCode, LeaveCode } from '../types';
@@ -71,7 +72,7 @@ export default function SummaryPage() {
 
   // ── Column visibility & Team filter ──
   const { showDesig, setShowDesig, showTeam, setShowTeam } = useColumnVisibility('summary');
-  const [selectedEmpIds, setSelectedEmpIds] = useState<Set<string>>(new Set());
+  const [selectedEmpIds, setSelectedEmpIds] = useTeamFilter();
 
   // ── Export ──
   const tableRef = useRef<HTMLTableElement>(null);
